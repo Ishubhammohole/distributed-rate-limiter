@@ -1,0 +1,13 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 1000ms
+      # Disable Redis for unit tests - integration tests will use Testcontainers
+      
+logging:
+  level:
+    com.ratelimiter: DEBUG
+    org.springframework.data.redis: WARN
+    org.springframework.test: INFO
