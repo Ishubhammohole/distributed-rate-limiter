@@ -26,6 +26,9 @@ public class RateLimitController {
     /**
      * Check rate limit for a given key and configuration.
      * 
+     * **IMPORTANT: This is currently using MOCK behavior for Phase 1.1**
+     * **Real rate limiting logic will be implemented in Phase 1.2/2.x**
+     * 
      * @param request the rate limit request containing key, algorithm, and limits
      * @return rate limit decision with remaining quota and timing information
      */
@@ -33,8 +36,8 @@ public class RateLimitController {
     public ResponseEntity<RateLimitResponse> checkRateLimit(@Valid @RequestBody RateLimitRequest request) {
         logger.debug("Rate limit check request: {}", request);
 
-        // TODO: Implement actual rate limiting logic
-        // For now, return a mock response to validate the API contract
+        // TODO: Replace with actual rate limiting logic in Phase 1.2
+        // Currently using mock responses to validate API contract
         RateLimitResponse response = createMockResponse(request);
         
         logger.debug("Rate limit check response: {}", response);
@@ -43,7 +46,9 @@ public class RateLimitController {
 
     /**
      * Create a mock response for testing the API contract.
-     * This will be replaced with actual rate limiting logic.
+     * 
+     * **MOCK BEHAVIOR - NOT REAL RATE LIMITING**
+     * This will be replaced with actual Redis-based rate limiting logic.
      */
     private RateLimitResponse createMockResponse(RateLimitRequest request) {
         // Mock logic: allow first 5 requests, then deny
