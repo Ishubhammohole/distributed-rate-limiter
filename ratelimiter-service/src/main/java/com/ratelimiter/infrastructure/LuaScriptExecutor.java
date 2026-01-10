@@ -45,7 +45,13 @@ public class LuaScriptExecutor {
                 return rs;
             });
             
-            return redisTemplate.execute(redisScript, keys, args);
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -69,7 +75,13 @@ public class LuaScriptExecutor {
                 return rs;
             });
             
-            return redisTemplate.execute(redisScript, keys, args);
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -83,6 +95,34 @@ public class LuaScriptExecutor {
         longScriptCache.clear();
         stringScriptCache.clear();
         logger.debug("Cleared script cache");
+    }
+    
+    /**
+     * Execute a Lua script that returns a List result.
+     * 
+     * @param script the Lua script content
+     * @param keys the Redis keys to pass to the script
+     * @param args the arguments to pass to the script
+     * @return the script execution result as List
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object> executeList(String script, List<String> keys, Object... args) {
+        try {
+            DefaultRedisScript<List> redisScript = new DefaultRedisScript<>();
+            redisScript.setScriptText(script);
+            redisScript.setResultType(List.class);
+            
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, stringArgs);
+        } catch (Exception e) {
+            logger.error("Failed to execute Lua script: {}", e.getMessage());
+            throw new RuntimeException("Lua script execution failed", e);
+        }
     }
     
     /**

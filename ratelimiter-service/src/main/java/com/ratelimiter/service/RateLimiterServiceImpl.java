@@ -39,9 +39,7 @@ public class RateLimiterServiceImpl implements RateLimiterService {
         RateLimiterStrategy strategy = strategies.get(algorithm);
         
         if (strategy == null) {
-            // TODO: Remove this fallback when all strategies are implemented in Phase 2
-            logger.warn("No strategy found for algorithm {}, using mock response", algorithm);
-            return createMockResponse(request);
+            throw new IllegalArgumentException("No strategy implementation found for algorithm: " + algorithm);
         }
         
         RateLimitResponse response = strategy.execute(request);
@@ -73,24 +71,6 @@ public class RateLimiterServiceImpl implements RateLimiterService {
             RateLimitAlgorithm.fromValue(request.getAlgorithm());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid algorithm: " + request.getAlgorithm(), e);
-        }
-    }
-    
-    /**
-     * Create a mock response for testing the service layer.
-     * TODO: Remove this method when all strategies are implemented in Phase 2.
-     */
-    private RateLimitResponse createMockResponse(RateLimitRequest request) {
-        // Mock logic: allow first few requests, then deny
-        long remaining = Math.max(0, request.getLimit() - 1);
-        boolean allowed = remaining > 0;
-        
-        Instant resetTime = Instant.now().plusSeconds(parseWindowToSeconds(request.getWindow()));
-        
-        if (allowed) {
-            return RateLimitResponse.allowed(remaining, resetTime);
-        } else {
-            return RateLimitResponse.denied(0, resetTime);
         }
     }
     
