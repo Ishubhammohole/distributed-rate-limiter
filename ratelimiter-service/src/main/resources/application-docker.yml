@@ -1,0 +1,17 @@
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 100
+          max-idle: 20
+          min-idle: 5
+          max-wait: 2000ms
+
+logging:
+  level:
+    com.ratelimiter: DEBUG
+    org.springframework.data.redis: INFO
