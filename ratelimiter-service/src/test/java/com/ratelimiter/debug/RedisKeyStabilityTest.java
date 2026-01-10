@@ -155,7 +155,8 @@ class RedisKeyStabilityTest {
         System.out.println("=== Verifying Token Exhaustion Behavior ===");
         
         String testKey = "exhaustion-test";
-        RateLimitRequest request = createRequest(testKey, 2L, "60s", 1);
+        // Use 1h window to minimize refill during rapid requests
+        RateLimitRequest request = createRequest(testKey, 2L, "1h", 1);
         String redisKey = "rl:" + testKey + ":tb";
         
         // Consume all tokens
@@ -177,14 +178,15 @@ class RedisKeyStabilityTest {
         assertThat(r3.isAllowed()).isFalse();
         assertThat(r3.getRemaining()).isEqualTo(0);
         
-        // Verify Redis state shows zero tokens
+        // Verify Redis state shows zero tokens (or very close to zero due to minimal refill)
         Map<Object, Object> finalState = redisTemplate.opsForHash().entries(redisKey);
         String finalTokens = (String) finalState.get("tokens");
         long finalTokensValue = Long.parseLong(finalTokens);
         
         System.out.printf("Final Redis tokens: %s (%d microtokens)\n", finalTokens, finalTokensValue);
-        assertThat(finalTokensValue).isEqualTo(0);
-        System.out.println("✅ Redis shows zero tokens after exhaustion");
+        // With 1h window, refill should be minimal (< 1000 microtokens = 0.001 tokens)
+        assertThat(finalTokensValue).isLessThan(1000);
+        System.out.println("✅ Redis shows near-zero tokens after exhaustion");
     }
 
     private RateLimitRequest createRequest(String key, Long limit, String window, int cost) {
