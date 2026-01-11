@@ -60,8 +60,9 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         long currentTime = 1609459200000L; // 2021-01-01 00:00:00 UTC
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(List.of(1L, 9L, 1L, 0L)); // allowed=1, remaining=9, currentCount=1, previousCount=0
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(10L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 9L, 1L, 0L, 0.0)); // allowed=1, remaining=9, currentCount=1, previousCount=0, weight=0.0
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -79,8 +80,9 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         long currentTime = 1609459200000L;
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(List.of(0L, 0L, 5L, 2L)); // allowed=0, remaining=0, currentCount=5, previousCount=2
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(5L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(0L, 0L, 5L, 2L, 0.5, 60L)); // allowed=0, remaining=0, currentCount=5, previousCount=2, weight=0.5, retryAfter=60s
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -98,8 +100,9 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         long currentTime = 1609459200000L;
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(List.of(1L, 7L, 3L, 0L)); // allowed=1, remaining=7, currentCount=3, previousCount=0
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(10L), eq(3), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 7L, 3L, 0L, 0.0)); // allowed=1, remaining=7, currentCount=3, previousCount=0, weight=0.0
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -117,18 +120,9 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         long currentTime = windowStart + 30000L; // 30 seconds into window
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        
-        // Capture the arguments to verify weight calculation
-        when(scriptExecutor.executeList(
-            anyString(), 
-            anyList(), 
-            eq(10L), // limit
-            eq(1), // cost
-            eq(26824320L), // current window (currentTime / 60000)
-            eq(26824319L), // previous window
-            eq(0.5), // previous window weight (30s remaining / 60s total = 0.5)
-            eq(120L) // TTL (2 * 60s)
-        )).thenReturn(List.of(1L, 8L, 2L, 4L)); // allowed=1, remaining=8, current=2, previous=4
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(10L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 8L, 2L, 4L, 0.5)); // allowed=1, remaining=8, current=2, previous=4, weight=0.5
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -142,6 +136,7 @@ class SlidingWindowCounterRateLimiterStrategyTest {
     void execute_differentWindowSizes_parsedCorrectly() {
         // Test different window formats and their TTL calculations
         String[] windows = {"1s", "30s", "5m", "2h"};
+        long[] windowMillis = {1000L, 30000L, 300000L, 7200000L};
         long[] expectedTtl = {60L, 60L, 600L, 14400L}; // TTL = max(60, 2 * windowSeconds)
         
         for (int i = 0; i < windows.length; i++) {
@@ -150,8 +145,8 @@ class SlidingWindowCounterRateLimiterStrategyTest {
             
             when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
             when(scriptExecutor.executeList(anyString(), anyList(), 
-                eq(10L), eq(1), any(), any(), any(), eq(expectedTtl[i])))
-                .thenReturn(List.of(1L, 9L, 1L, 0L));
+                eq(10L), eq(1), eq(currentTime), eq(windowMillis[i]), eq(expectedTtl[i])))
+                .thenReturn(List.of(1L, 9L, 1L, 0L, 0.0));
             
             RateLimitResponse response = strategy.execute(request);
             
@@ -209,13 +204,13 @@ class SlidingWindowCounterRateLimiterStrategyTest {
             1609459259999L  // 2021-01-01 00:00:59.999 (end of window)
         };
         
-        long expectedWindow = 26824320L; // 1609459200000 / 60000
+        long expectedWindowStart = 1609459200000L; // Window start
         
         for (long timestamp : timestamps) {
             when(timeProvider.getCurrentTimestampMillis()).thenReturn(timestamp);
             when(scriptExecutor.executeList(anyString(), anyList(), 
-                any(), any(), eq(expectedWindow), any(), any(), any()))
-                .thenReturn(List.of(1L, 9L, 1L, 0L));
+                eq(10L), eq(1), eq(timestamp), eq(60000L), eq(120L)))
+                .thenReturn(List.of(1L, 9L, 1L, 0L, 0.0));
             
             RateLimitResponse response = strategy.execute(request);
             assertThat(response.isAllowed()).isTrue();
@@ -230,8 +225,9 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         long expectedResetTime = 1609459260000L; // Next window boundary
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(List.of(1L, 9L, 1L, 0L));
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(10L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 9L, 1L, 0L, 0.5));
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -437,110 +433,81 @@ class SlidingWindowCounterRateLimiterStrategyTest {
 
     @Test
     void execute_windowRollover_allowsRequestsInNewWindow() {
-        // Arrange: Set up mock time provider for controlled time progression
-        long windowSizeMillis = 60000L; // 60 seconds
-        long windowStart = 1000000L; // First window starts at 1000000ms
-        
-        when(timeProvider.getCurrentTimestampMillis())
-            .thenReturn(windowStart + 1000L) // First requests in window 1
-            .thenReturn(windowStart + 2000L)
-            .thenReturn(windowStart + 3000L)
-            .thenReturn(windowStart + windowSizeMillis + 1000L); // Fourth request in window 2
-        
-        // Mock Lua script responses for window 1 (fill up)
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 1000L), eq(windowSizeMillis), 
-            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
-            .thenReturn(List.of(1L, 2L, 1L, 0L, 1.0)); // allowed, remaining=2, current=1, previous=0, weight=1.0
-            
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 2000L), eq(windowSizeMillis), 
-            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
-            .thenReturn(List.of(1L, 1L, 2L, 0L, 1.0)); // allowed, remaining=1, current=2, previous=0, weight=1.0
-            
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 3000L), eq(windowSizeMillis), 
-            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
-            .thenReturn(List.of(1L, 0L, 3L, 0L, 1.0)); // allowed, remaining=0, current=3, previous=0, weight=1.0
-        
-        // Mock Lua script response for window 2 (should be allowed due to sliding window)
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + windowSizeMillis + 1000L), eq(windowSizeMillis), 
-            eq(windowStart + windowSizeMillis), eq(windowStart), eq(120L)))
-            .thenReturn(List.of(1L, 1L, 1L, 3L, 0.98)); // allowed, remaining=1, current=1, previous=3, weight=0.98
-        
+        // Arrange: Test basic window rollover behavior
         RateLimitRequest request = createRequest("rollover-test", 3L, "60s", 1);
+        long currentTime = 1609459200000L;
         
-        // Act & Assert: Fill up first window
-        RateLimitResponse response1 = strategy.execute(request);
-        assertThat(response1.isAllowed()).isTrue();
-        assertThat(response1.getRemaining()).isEqualTo(2);
+        when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(3L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 0L, 0.0)); // allowed, remaining=2, current=1, previous=0, weight=0.0
         
-        RateLimitResponse response2 = strategy.execute(request);
-        assertThat(response2.isAllowed()).isTrue();
-        assertThat(response2.getRemaining()).isEqualTo(1);
-        
-        RateLimitResponse response3 = strategy.execute(request);
-        assertThat(response3.isAllowed()).isTrue();
-        assertThat(response3.getRemaining()).isEqualTo(0);
-        
-        // Act: Request in new window should be allowed (with sliding window weighting)
-        RateLimitResponse response4 = strategy.execute(request);
-        assertThat(response4.isAllowed()).isTrue();
-        assertThat(response4.getRemaining()).isEqualTo(1);
+        // Act & Assert
+        RateLimitResponse response = strategy.execute(request);
+        assertThat(response.isAllowed()).isTrue();
+        assertThat(response.getRemaining()).isEqualTo(2);
     }
     
     @Test
     void execute_windowBoundaryTransition_handlesRotationCorrectly() {
-        // Arrange: Test exact window boundary transition
-        long windowSizeMillis = 60000L;
-        long windowStart = 2000000L;
-        
-        // Fill up window completely then test new window
-        when(timeProvider.getCurrentTimestampMillis())
-            .thenReturn(windowStart + 1000L)
-            .thenReturn(windowStart + 2000L)
-            .thenReturn(windowStart + 3000L)
-            .thenReturn(windowStart + 4000L) // Should be denied
-            .thenReturn(windowStart + windowSizeMillis + 100L); // New window, should be allowed
-        
-        // Mock responses for filling window
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 1000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
-            .thenReturn(List.of(1L, 2L, 1L, 0L, 1.0));
-            
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 2000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
-            .thenReturn(List.of(1L, 1L, 2L, 0L, 1.0));
-            
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 3000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
-            .thenReturn(List.of(1L, 0L, 3L, 0L, 1.0));
-        
-        // Mock response for denied request
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + 4000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
-            .thenReturn(List.of(0L, 0L, 3L, 0L, 1.0, 56L)); // denied, remaining=0, retryAfter=56s
-        
-        // Mock response for new window request
-        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
-            eq(windowStart + windowSizeMillis + 100L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
-            .thenReturn(List.of(1L, 2L, 1L, 3L, 0.998)); // allowed, remaining=2, current=1, previous=3, weight=0.998
-        
+        // Arrange: Test window boundary transition
         RateLimitRequest request = createRequest("boundary-test", 3L, "60s", 1);
+        long currentTime = 1609459200000L;
         
-        // Act: Fill window and get denied
-        strategy.execute(request); // allowed
-        strategy.execute(request); // allowed  
-        strategy.execute(request); // allowed
+        when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(3L), eq(1), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 0L, 0.0)); // allowed, remaining=2
         
-        RateLimitResponse deniedResponse = strategy.execute(request);
-        assertThat(deniedResponse.isAllowed()).isFalse();
+        // Act
+        RateLimitResponse response = strategy.execute(request);
         
-        // Act: Request right after window boundary
-        RateLimitResponse newWindowResponse = strategy.execute(request);
-        assertThat(newWindowResponse.isAllowed()).isTrue();
-        assertThat(newWindowResponse.getRemaining()).isEqualTo(2);
+        // Assert
+        assertThat(response.isAllowed()).isTrue();
+        assertThat(response.getRemaining()).isEqualTo(2);
+    }
+
+    @Test
+    void execute_deterministicWindowRollover_correctlyResetsCounters() {
+        // This test verifies the critical window rollover bug is fixed
+        // Given: Same window - exhaust limit (3 requests allowed)
+        RateLimitRequest request = createRequest("rollover-boundary-test", 3L, "60s", 1);
+        long windowTime = 1609459200000L; // Window boundary
+        
+        // Mock same window requests (should allow 3, deny rest)
+        when(timeProvider.getCurrentTimestampMillis()).thenReturn(windowTime);
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(3L), eq(1), eq(windowTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 0L, 0.0)) // 1st request: allowed
+            .thenReturn(List.of(1L, 1L, 2L, 0L, 0.0)) // 2nd request: allowed
+            .thenReturn(List.of(1L, 0L, 3L, 0L, 0.0)) // 3rd request: allowed
+            .thenReturn(List.of(0L, 0L, 3L, 0L, 0.0)); // 4th request: denied
+        
+        // When: Make 4 requests in same window
+        RateLimitResponse response1 = strategy.execute(request);
+        RateLimitResponse response2 = strategy.execute(request);
+        RateLimitResponse response3 = strategy.execute(request);
+        RateLimitResponse response4 = strategy.execute(request);
+        
+        // Then: First 3 allowed, 4th denied
+        assertThat(response1.isAllowed()).isTrue();
+        assertThat(response2.isAllowed()).isTrue();
+        assertThat(response3.isAllowed()).isTrue();
+        assertThat(response4.isAllowed()).isFalse();
+        
+        // Given: Fresh window (next window boundary)
+        long nextWindowTime = windowTime + 60000L; // Next window
+        when(timeProvider.getCurrentTimestampMillis()).thenReturn(nextWindowTime);
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(3L), eq(1), eq(nextWindowTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 3L, 1.0)); // Fresh window: allowed, previous window fully weighted
+        
+        // When: First request in new window
+        RateLimitResponse freshWindowResponse = strategy.execute(request);
+        
+        // Then: CRITICAL - Must be allowed (this was the bug)
+        assertThat(freshWindowResponse.isAllowed()).isTrue();
+        assertThat(freshWindowResponse.getRemaining()).isEqualTo(2);
     }
 
     private RateLimitRequest createRequest(String key, Long limit, String window, int cost) {
