@@ -89,22 +89,23 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
 **Script Name:** `sliding-window-counter.lua`
 
 **Input Parameters:**
-1. `currentWindowKey` - Redis key for current window counter
-2. `previousWindowKey` - Redis key for previous window counter  
+1. `currentWindowKey` - Redis key for current window (includes window timestamp)
+2. `previousWindowKey` - Redis key for previous window (includes window timestamp)  
 3. `limit` - Rate limit threshold
 4. `cost` - Request cost (typically 1)
-5. `currentWindow` - Current window identifier
-6. `previousWindow` - Previous window identifier
-7. `previousWindowWeight` - Weight factor for previous window (0.0 to 1.0)
-8. `ttlSeconds` - TTL for counter keys
+5. `nowMillis` - Current timestamp in milliseconds
+6. `windowSizeMillis` - Window size in milliseconds
+7. `ttlSeconds` - TTL for counter keys
 
 **Return Values:**
 ```lua
--- Returns array: [allowed, remaining, currentCount, previousCount]
+-- Returns array: [allowed, remaining, currentCount, previousCount, weight, retryAfterSeconds?]
 -- allowed: 1 if request allowed, 0 if rate limited
 -- remaining: number of requests remaining in current window
 -- currentCount: current window counter value
 -- previousCount: previous window counter value
+-- weight: calculated weight factor for previous window (0.0 to 1.0)
+-- retryAfterSeconds: seconds until next window (only when denied)
 ```
 
 **Script Logic:**
@@ -113,37 +114,35 @@ local currentWindowKey = KEYS[1]
 local previousWindowKey = KEYS[2]
 local limit = tonumber(ARGV[1])
 local cost = tonumber(ARGV[2])
-local currentWindow = tonumber(ARGV[3])
-local previousWindow = tonumber(ARGV[4])
-local previousWindowWeight = tonumber(ARGV[5])
-local ttlSeconds = tonumber(ARGV[6])
+local nowMillis = tonumber(ARGV[3])
+local windowSizeMillis = tonumber(ARGV[4])
+local ttlSeconds = tonumber(ARGV[5])
 
--- Get current counters
+-- Get current and previous window counters (simple integers)
 local currentCount = tonumber(redis.call('GET', currentWindowKey) or 0)
 local previousCount = tonumber(redis.call('GET', previousWindowKey) or 0)
 
--- Calculate weighted total
-local weightedPreviousCount = math.floor(previousCount * previousWindowWeight)
-local totalCount = currentCount + weightedPreviousCount
+-- Calculate previous window weight based on time overlap
+local currentWindowStart = math.floor(nowMillis / windowSizeMillis) * windowSizeMillis
+local timeIntoCurrentWindow = nowMillis - currentWindowStart
+local weight = (windowSizeMillis - timeIntoCurrentWindow) / windowSizeMillis
 
--- Check if request can be allowed
-if totalCount + cost <= limit then
+-- Calculate weighted total and check limit
+local weightedPreviousCount = math.floor(previousCount * weight)
+local estimatedCount = currentCount + weightedPreviousCount
+
+if estimatedCount + cost <= limit then
     -- Allow request and increment counter
     local newCurrentCount = redis.call('INCRBY', currentWindowKey, cost)
     redis.call('EXPIRE', currentWindowKey, ttlSeconds)
     
-    -- Ensure previous window exists with TTL
-    if redis.call('EXISTS', previousWindowKey) == 0 then
-        redis.call('SET', previousWindowKey, 0)
-    end
-    redis.call('EXPIRE', previousWindowKey, ttlSeconds)
-    
     local remaining = limit - (newCurrentCount + weightedPreviousCount)
-    return {1, remaining, newCurrentCount, previousCount}
+    return {1, remaining, newCurrentCount, previousCount, weight}
 else
     -- Rate limited
-    local remaining = limit - totalCount
-    return {0, remaining, currentCount, previousCount}
+    local remaining = limit - estimatedCount
+    local retryAfterSeconds = math.ceil((currentWindowStart + windowSizeMillis - nowMillis) / 1000)
+    return {0, remaining, currentCount, previousCount, weight, retryAfterSeconds}
 end
 ```
 
@@ -152,12 +151,14 @@ end
 ### Redis Key Schema
 
 ```
-Pattern: rate_limit:sliding_window_counter:{userKey}:{window_type}
+Pattern: rate_limit:sliding_window_counter:{userKey}:{windowId}
 Examples:
-- rate_limit:sliding_window_counter:user:123:current
-- rate_limit:sliding_window_counter:user:123:previous
-- rate_limit:sliding_window_counter:api:v1:posts:current
-- rate_limit:sliding_window_counter:api:v1:posts:previous
+- rate_limit:sliding_window_counter:user:123:26824320 (current window)
+- rate_limit:sliding_window_counter:user:123:26824319 (previous window)
+- rate_limit:sliding_window_counter:api:v1:posts:26824320 (current window)
+- rate_limit:sliding_window_counter:api:v1:posts:26824319 (previous window)
+
+Where windowId = currentTimeMillis / windowSizeMillis
 ```
 
 ### Window Calculation Model
