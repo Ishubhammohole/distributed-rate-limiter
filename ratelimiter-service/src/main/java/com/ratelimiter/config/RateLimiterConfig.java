@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,16 @@ import java.util.Map;
 public class RateLimiterConfig {
     
     private static final Logger logger = LoggerFactory.getLogger(RateLimiterConfig.class);
+    
+    /**
+     * Provide system clock for time-based operations.
+     * 
+     * @return system UTC clock
+     */
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
     
     /**
      * Create the strategy registry that maps algorithms to their implementations.
