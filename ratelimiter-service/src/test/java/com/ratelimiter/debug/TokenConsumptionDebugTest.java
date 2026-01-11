@@ -4,6 +4,7 @@ import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.strategy.TokenBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +20,8 @@ import org.testcontainers.utility.DockerImageName;
  * Debug test to reproduce the token consumption issue.
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class TokenConsumptionDebugTest {
 
     @Container

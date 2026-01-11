@@ -4,6 +4,7 @@ import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.strategy.TokenBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 3. Timestamps are correctly stored and updated
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class RedisKeyStabilityTest {
 
     @Container

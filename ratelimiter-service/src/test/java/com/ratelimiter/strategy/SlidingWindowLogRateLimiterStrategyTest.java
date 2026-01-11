@@ -6,6 +6,7 @@ import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.infrastructure.LuaScriptExecutor;
 import com.ratelimiter.infrastructure.RedisTimeProvider;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,7 +33,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Integration tests for SlidingWindowLogRateLimiterStrategy using Testcontainers.
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class SlidingWindowLogRateLimiterStrategyTest {
 
     @Container

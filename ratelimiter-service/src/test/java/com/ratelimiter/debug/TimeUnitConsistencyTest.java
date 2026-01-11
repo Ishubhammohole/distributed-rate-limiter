@@ -4,6 +4,7 @@ import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.strategy.TokenBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * This test demonstrates the time-based refill issue and validates fixes.
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class TimeUnitConsistencyTest {
 
     @Container

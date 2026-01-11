@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,7 +26,8 @@ import org.testcontainers.utility.DockerImageName;
  * Debug test to reproduce the API endpoint issue.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class ApiEndpointDebugTest {
 
     @Container
