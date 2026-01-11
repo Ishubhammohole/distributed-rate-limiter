@@ -42,11 +42,9 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     
     /**
      * Redis key pattern for sliding window counter.
-     * Pattern: rate_limit:sliding_window_counter:{userKey}:{window_type}
+     * Pattern: rate_limit:sliding_window_counter:{userKey}:{windowId}
      */
     private static final String KEY_PREFIX = "rate_limit:sliding_window_counter:";
-    private static final String CURRENT_SUFFIX = ":current";
-    private static final String PREVIOUS_SUFFIX = ":previous";
     
     public SlidingWindowCounterRateLimiterStrategy(
             LuaScriptExecutor scriptExecutor, 
@@ -70,17 +68,14 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             long currentWindow = calculateCurrentWindow(currentTimeMillis, windowSizeMillis);
             long previousWindow = currentWindow - 1;
             
-            // Calculate previous window weight based on time overlap
-            double previousWindowWeight = calculatePreviousWindowWeight(currentTimeMillis, windowSizeMillis);
-            
-            // Build Redis keys
-            String currentWindowKey = buildCurrentWindowKey(request.getKey());
-            String previousWindowKey = buildPreviousWindowKey(request.getKey());
+            // Build window-scoped Redis keys (includes window timestamp)
+            String currentWindowKey = buildWindowScopedKey(request.getKey(), currentWindow);
+            String previousWindowKey = buildWindowScopedKey(request.getKey(), previousWindow);
             
             // Calculate TTL (2x window size to ensure previous window availability)
             long ttlSeconds = Math.max(60L, (windowSizeMillis * 2) / 1000L);
             
-            // Execute Lua script atomically with window-aware parameters
+            // Execute Lua script atomically with simplified parameters
             List<Object> result = scriptExecutor.executeList(
                 luaScript,
                 List.of(currentWindowKey, previousWindowKey),
@@ -88,8 +83,6 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
                 request.getCost(),
                 currentTimeMillis,
                 windowSizeMillis,
-                currentWindow * windowSizeMillis, // currentWindowStart
-                previousWindow * windowSizeMillis, // previousWindowStart
                 ttlSeconds
             );
             
@@ -178,22 +171,6 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     }
     
     /**
-     * Calculate the weight factor for the previous window based on time overlap.
-     * The weight represents how much of the previous window should contribute
-     * to the current rate calculation.
-     * 
-     * Formula: (windowSize - timeIntoCurrentWindow) / windowSize
-     * 
-     * @param currentTimeMillis current timestamp in milliseconds
-     * @param windowSizeMillis window size in milliseconds
-     * @return weight factor between 0.0 and 1.0
-     */
-    private double calculatePreviousWindowWeight(long currentTimeMillis, long windowSizeMillis) {
-        long timeIntoCurrentWindow = currentTimeMillis % windowSizeMillis;
-        return (double) (windowSizeMillis - timeIntoCurrentWindow) / windowSizeMillis;
-    }
-    
-    /**
      * Calculate the reset time (next window boundary).
      * 
      * @param currentWindow current window identifier
@@ -206,23 +183,15 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     }
     
     /**
-     * Build Redis key for current window counter.
+     * Build window-scoped Redis key that includes the window timestamp.
+     * This automatically handles window transitions without complex rotation logic.
      * 
      * @param key user-provided rate limit key
-     * @return Redis key for current window
+     * @param windowId window identifier (timestamp / windowSize)
+     * @return Redis key scoped to specific window
      */
-    private String buildCurrentWindowKey(String key) {
-        return KEY_PREFIX + key + CURRENT_SUFFIX;
-    }
-    
-    /**
-     * Build Redis key for previous window counter.
-     * 
-     * @param key user-provided rate limit key
-     * @return Redis key for previous window
-     */
-    private String buildPreviousWindowKey(String key) {
-        return KEY_PREFIX + key + PREVIOUS_SUFFIX;
+    private String buildWindowScopedKey(String key, long windowId) {
+        return KEY_PREFIX + key + ":" + windowId;
     }
     
     /**
