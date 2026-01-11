@@ -117,8 +117,8 @@ class ValidationStandardizationTest {
     void testUnsupportedAlgorithmValidation() throws Exception {
         System.out.println("=== Testing Unsupported Algorithm Validation ===");
         
-        // sliding_window_log is a valid algorithm but not implemented
-        RateLimitRequest request = createRequest("test-key", "sliding_window_log", 10L, "60s", 1);
+        // fixed_window is a valid algorithm but not implemented
+        RateLimitRequest request = createRequest("test-key", "fixed_window", 10L, "60s", 1);
         
         MvcResult result = mockMvc.perform(post("/api/v1/ratelimit/check")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -131,7 +131,7 @@ class ValidationStandardizationTest {
         
         assertThat(error.getError()).isEqualTo("BAD_REQUEST");
         assertThat(error.getMessage()).contains("No strategy implementation found");
-        assertThat(error.getMessage()).contains("SLIDING_WINDOW_LOG");
+        assertThat(error.getMessage()).contains("FIXED_WINDOW");
     }
 
     @Test
