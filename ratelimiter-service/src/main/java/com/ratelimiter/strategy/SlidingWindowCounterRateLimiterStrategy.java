@@ -80,34 +80,44 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             // Calculate TTL (2x window size to ensure previous window availability)
             long ttlSeconds = Math.max(60L, (windowSizeMillis * 2) / 1000L);
             
-            // Execute Lua script atomically
+            // Execute Lua script atomically with window-aware parameters
             List<Object> result = scriptExecutor.executeList(
                 luaScript,
                 List.of(currentWindowKey, previousWindowKey),
                 request.getLimit(),
                 request.getCost(),
-                currentWindow,
-                previousWindow,
-                previousWindowWeight,
+                currentTimeMillis,
+                windowSizeMillis,
+                currentWindow * windowSizeMillis, // currentWindowStart
+                previousWindow * windowSizeMillis, // previousWindowStart
                 ttlSeconds
             );
             
-            // Parse script results: [allowed, remaining, currentCount, previousCount]
+            // Parse script results: [allowed, remaining, currentCount, previousCount, weight, retryAfterSeconds?]
+            if (result.isEmpty()) {
+                throw new RuntimeException("Lua script returned empty result");
+            }
+            
             long allowed = ((Number) result.get(0)).longValue();
             long remaining = ((Number) result.get(1)).longValue();
             long currentCount = ((Number) result.get(2)).longValue();
             long previousCount = ((Number) result.get(3)).longValue();
+            double actualWeight = result.size() > 4 ? ((Number) result.get(4)).doubleValue() : 0.0;
             
             // Calculate reset time (next window boundary)
             Instant resetTime = calculateResetTime(currentWindow, windowSizeMillis);
             
             if (allowed == 1) {
                 logger.debug("Sliding window counter allowed request for key={}, remaining={}, current={}, previous={}, weight={}", 
-                    request.getKey(), remaining, currentCount, previousCount, previousWindowWeight);
+                    request.getKey(), remaining, currentCount, previousCount, actualWeight);
                 return RateLimitResponse.allowed(remaining, resetTime);
             } else {
-                logger.debug("Sliding window counter denied request for key={}, remaining={}, current={}, previous={}, weight={}", 
-                    request.getKey(), remaining, currentCount, previousCount, previousWindowWeight);
+                // Get retryAfter from Lua script if available, otherwise calculate
+                long retryAfterSeconds = result.size() > 5 ? ((Number) result.get(5)).longValue() : 
+                    (resetTime.toEpochMilli() - currentTimeMillis) / 1000L;
+                
+                logger.debug("Sliding window counter denied request for key={}, remaining={}, current={}, previous={}, weight={}, retryAfter={}s", 
+                    request.getKey(), remaining, currentCount, previousCount, actualWeight, retryAfterSeconds);
                 return RateLimitResponse.denied(remaining, resetTime);
             }
             

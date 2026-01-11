@@ -435,6 +435,114 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         }
     }
 
+    @Test
+    void execute_windowRollover_allowsRequestsInNewWindow() {
+        // Arrange: Set up mock time provider for controlled time progression
+        long windowSizeMillis = 60000L; // 60 seconds
+        long windowStart = 1000000L; // First window starts at 1000000ms
+        
+        when(timeProvider.getCurrentTimestampMillis())
+            .thenReturn(windowStart + 1000L) // First requests in window 1
+            .thenReturn(windowStart + 2000L)
+            .thenReturn(windowStart + 3000L)
+            .thenReturn(windowStart + windowSizeMillis + 1000L); // Fourth request in window 2
+        
+        // Mock Lua script responses for window 1 (fill up)
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 1000L), eq(windowSizeMillis), 
+            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 0L, 1.0)); // allowed, remaining=2, current=1, previous=0, weight=1.0
+            
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 2000L), eq(windowSizeMillis), 
+            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
+            .thenReturn(List.of(1L, 1L, 2L, 0L, 1.0)); // allowed, remaining=1, current=2, previous=0, weight=1.0
+            
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 3000L), eq(windowSizeMillis), 
+            eq(windowStart), eq(windowStart - windowSizeMillis), eq(120L)))
+            .thenReturn(List.of(1L, 0L, 3L, 0L, 1.0)); // allowed, remaining=0, current=3, previous=0, weight=1.0
+        
+        // Mock Lua script response for window 2 (should be allowed due to sliding window)
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + windowSizeMillis + 1000L), eq(windowSizeMillis), 
+            eq(windowStart + windowSizeMillis), eq(windowStart), eq(120L)))
+            .thenReturn(List.of(1L, 1L, 1L, 3L, 0.98)); // allowed, remaining=1, current=1, previous=3, weight=0.98
+        
+        RateLimitRequest request = createRequest("rollover-test", 3L, "60s", 1);
+        
+        // Act & Assert: Fill up first window
+        RateLimitResponse response1 = strategy.execute(request);
+        assertThat(response1.isAllowed()).isTrue();
+        assertThat(response1.getRemaining()).isEqualTo(2);
+        
+        RateLimitResponse response2 = strategy.execute(request);
+        assertThat(response2.isAllowed()).isTrue();
+        assertThat(response2.getRemaining()).isEqualTo(1);
+        
+        RateLimitResponse response3 = strategy.execute(request);
+        assertThat(response3.isAllowed()).isTrue();
+        assertThat(response3.getRemaining()).isEqualTo(0);
+        
+        // Act: Request in new window should be allowed (with sliding window weighting)
+        RateLimitResponse response4 = strategy.execute(request);
+        assertThat(response4.isAllowed()).isTrue();
+        assertThat(response4.getRemaining()).isEqualTo(1);
+    }
+    
+    @Test
+    void execute_windowBoundaryTransition_handlesRotationCorrectly() {
+        // Arrange: Test exact window boundary transition
+        long windowSizeMillis = 60000L;
+        long windowStart = 2000000L;
+        
+        // Fill up window completely then test new window
+        when(timeProvider.getCurrentTimestampMillis())
+            .thenReturn(windowStart + 1000L)
+            .thenReturn(windowStart + 2000L)
+            .thenReturn(windowStart + 3000L)
+            .thenReturn(windowStart + 4000L) // Should be denied
+            .thenReturn(windowStart + windowSizeMillis + 100L); // New window, should be allowed
+        
+        // Mock responses for filling window
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 1000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 0L, 1.0));
+            
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 2000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
+            .thenReturn(List.of(1L, 1L, 2L, 0L, 1.0));
+            
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 3000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
+            .thenReturn(List.of(1L, 0L, 3L, 0L, 1.0));
+        
+        // Mock response for denied request
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + 4000L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
+            .thenReturn(List.of(0L, 0L, 3L, 0L, 1.0, 56L)); // denied, remaining=0, retryAfter=56s
+        
+        // Mock response for new window request
+        when(scriptExecutor.executeList(anyString(), anyList(), eq(3L), eq(1), 
+            eq(windowStart + windowSizeMillis + 100L), eq(windowSizeMillis), anyLong(), anyLong(), eq(120L)))
+            .thenReturn(List.of(1L, 2L, 1L, 3L, 0.998)); // allowed, remaining=2, current=1, previous=3, weight=0.998
+        
+        RateLimitRequest request = createRequest("boundary-test", 3L, "60s", 1);
+        
+        // Act: Fill window and get denied
+        strategy.execute(request); // allowed
+        strategy.execute(request); // allowed  
+        strategy.execute(request); // allowed
+        
+        RateLimitResponse deniedResponse = strategy.execute(request);
+        assertThat(deniedResponse.isAllowed()).isFalse();
+        
+        // Act: Request right after window boundary
+        RateLimitResponse newWindowResponse = strategy.execute(request);
+        assertThat(newWindowResponse.isAllowed()).isTrue();
+        assertThat(newWindowResponse.getRemaining()).isEqualTo(2);
+    }
+
     private RateLimitRequest createRequest(String key, Long limit, String window, int cost) {
         RateLimitRequest request = new RateLimitRequest();
         request.setKey(key);
