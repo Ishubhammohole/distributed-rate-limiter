@@ -75,3 +75,7 @@ coverage/
 
 # Claude AI files
 .claude/
+# Local debug scripts
+inspect-redis.sh
+test-api.sh
+test-sliding-window-log.sh
