@@ -66,12 +66,12 @@ This service solves these challenges with a stateless, horizontally scalable arc
 
 ## Supported Algorithms
 
-| Algorithm | Use Case | Memory | Accuracy | Burst Handling |
-|-----------|----------|---------|----------|----------------|
-| **Token Bucket** | API rate limiting | O(1) | High | Excellent |
-| **Sliding Window Log** | Precise tracking | O(n) | Perfect | Good |
-| **Fixed Window** | Simple quotas | O(1) | Good | Poor |
-| **Sliding Window Counter** | Memory-efficient approximation | O(1) | High | Good |
+| Algorithm | Use Case | Memory | Accuracy | Burst Handling | Status |
+|-----------|----------|---------|----------|----------------|---------|
+| **Token Bucket** | API rate limiting | O(1) | High | Excellent | ✅ Implemented |
+| **Sliding Window Log** | Precise tracking | O(n) | Perfect | Good | ✅ Implemented |
+| **Fixed Window** | Simple quotas | O(1) | Good | Poor | ✅ Implemented |
+| **Sliding Window Counter** | Memory-efficient approximation | O(1) | High | Good | ✅ Implemented |
 
 ### When to Use Each Algorithm
 
@@ -90,23 +90,21 @@ This service solves these challenges with a stateless, horizontally scalable arc
 
 ## Quick Start (3 Commands)
 
-> **⚠️ CURRENT STATUS**: Phase 1.1 complete - API contract implemented with **MOCK responses**  
-> Real rate limiting logic will be implemented in Phase 1.2/2.x with Redis integration.
+> **⚠️ CURRENT STATUS**: All 4 rate limiting algorithms implemented with Redis integration  
+> Service provides production-ready rate limiting with atomic operations and fail-open behavior.
 
 ```bash
-# 1. Start infrastructure
+# 1. Start infrastructure (Redis, Prometheus, Grafana)
 docker-compose -f infra/docker-compose.yml up -d
 
 # 2. Build and start the service
 cd ratelimiter-service && mvn spring-boot:run
 
-# 3. Test the API (currently returns mock responses)
+# 3. Test the API with real rate limiting
 curl -X POST http://localhost:8080/api/v1/ratelimit/check \
   -H "Content-Type: application/json" \
-  -d '{"key":"test:user","algorithm":"token_bucket","limit":10,"window":"60s","cost":1}'
+  -d '{"key":"test:user","algorithm":"sliding_window_counter","limit":10,"window":"60s","cost":1}'
 ```
-
-> **Note**: The API currently returns mock responses for testing the contract. Real rate limiting will be implemented in Phase 1.2.
 
 ## Testing
 
