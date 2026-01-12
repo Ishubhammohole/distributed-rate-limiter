@@ -73,6 +73,10 @@ coverage/
 # jqwik property-based testing
 .jqwik-database
 
+# Local Redis artifacts
+*.rdb
+dump.rdb
+
 # AI Tools
 .claude/
 .kiro/
