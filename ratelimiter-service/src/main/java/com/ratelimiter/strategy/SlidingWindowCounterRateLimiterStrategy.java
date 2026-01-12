@@ -101,21 +101,21 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             Instant resetTime = calculateResetTime(currentWindow, windowSizeMillis);
             
             if (allowed == 1) {
-                logger.debug("Sliding window counter allowed request for key={}, remaining={}, current={}, previous={}, weight={}", 
-                    request.getKey(), remaining, currentCount, previousCount, actualWeight);
+                logger.debug("Rate limit allowed: key={}, algorithm=sliding_window_counter, limit={}, window={}ms, remaining={}, current={}, previous={}, weight={}", 
+                    sanitizeKey(request.getKey()), request.getLimit(), windowSizeMillis, remaining, currentCount, previousCount, String.format("%.3f", actualWeight));
                 return RateLimitResponse.allowed(remaining, resetTime);
             } else {
                 // Get retryAfter from Lua script if available, otherwise calculate
                 long retryAfterSeconds = result.size() > 5 ? ((Number) result.get(5)).longValue() : 
                     (resetTime.toEpochMilli() - currentTimeMillis) / 1000L;
                 
-                logger.debug("Sliding window counter denied request for key={}, remaining={}, current={}, previous={}, weight={}, retryAfter={}s", 
-                    request.getKey(), remaining, currentCount, previousCount, actualWeight, retryAfterSeconds);
+                logger.info("Rate limit exceeded: key={}, algorithm=sliding_window_counter, limit={}, window={}ms, remaining={}, current={}, previous={}, weight={}, retryAfter={}s", 
+                    sanitizeKey(request.getKey()), request.getLimit(), windowSizeMillis, remaining, currentCount, previousCount, String.format("%.3f", actualWeight), retryAfterSeconds);
                 return RateLimitResponse.denied(remaining, resetTime);
             }
             
         } catch (Exception e) {
-            logger.error("Sliding window counter execution failed for key={}, failing open", request.getKey(), e);
+            logger.error("Rate limit execution failed: key={}, algorithm=sliding_window_counter, failing open", sanitizeKey(request.getKey()), e);
             
             // Fail-open behavior: allow request with conservative remaining estimate
             Instant resetTime = Instant.now(clock).plusMillis(parseWindowToMilliseconds(request.getWindow()));
@@ -248,5 +248,15 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             case "d" -> value * 24L * 60L * 60L * 1000L;
             default -> throw new IllegalArgumentException("Unsupported window unit: " + unit + ". Supported: s, m, h, d");
         };
+    }
+    
+    /**
+     * Sanitize key for logging to prevent PII exposure.
+     * Truncates long keys and masks potentially sensitive data.
+     */
+    private String sanitizeKey(String key) {
+        if (key == null) return "null";
+        if (key.length() <= 32) return key;
+        return key.substring(0, 16) + "..." + key.substring(key.length() - 8);
     }
 }

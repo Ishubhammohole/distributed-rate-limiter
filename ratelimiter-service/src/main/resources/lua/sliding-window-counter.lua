@@ -70,8 +70,9 @@ if estimatedCount + cost <= limit then
         redis.call('EXPIRE', previousWindowKey, ttlSeconds)
     end
     
-    -- Calculate remaining requests
-    local remaining = limit - (newCurrentCount + weightedPreviousCount)
+    -- Calculate remaining requests using the same logic as the decision
+    local newEstimatedCount = newCurrentCount + weightedPreviousCount
+    local remaining = limit - newEstimatedCount
     if remaining < 0 then
         remaining = 0
     end

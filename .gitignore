@@ -73,8 +73,14 @@ coverage/
 # jqwik property-based testing
 .jqwik-database
 
-# Claude AI files
+# AI Tools
 .claude/
+.kiro/
+.cursor/
+.copilot/
+.aider/
+.windsurf/
+
 # Local debug scripts
 inspect-redis.sh
 test-api.sh

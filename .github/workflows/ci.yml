@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Cache Maven dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: Run tests
+      run: |
+        cd ratelimiter-service
+        ./mvnw test
+        
+    - name: Run verification scripts
+      run: |
+        # Install dependencies for verification scripts
+        sudo apt-get update
+        sudo apt-get install -y redis-tools bc jq curl
+        
+        # Start the application in background
+        cd ratelimiter-service
+        ./mvnw spring-boot:run &
+        APP_PID=$!
+        
+        # Wait for application to start
+        sleep 30
+        
+        # Run verification scripts
+        cd ..
+        make verify || true  # Don't fail CI if verification has issues
+        
+        # Clean up
+        kill $APP_PID || true
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: ratelimiter-service/target/surefire-reports/

@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)
 @Tag("integration")
+@SuppressWarnings("deprecation") // Testcontainers GenericContainer constructor - acceptable for test infrastructure
 class LuaScriptExecutorTest {
 
     @Container

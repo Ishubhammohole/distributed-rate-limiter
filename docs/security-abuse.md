@@ -67,7 +67,7 @@ public class RateLimitController {
     public ResponseEntity<RateLimitResponse> checkLimit(
             @Valid @RequestBody RateLimitRequest request) {
         
-        // Comprehensive input validation
+        // Input validation
         validateRequest(request);
         return rateLimitService.checkLimit(request);
     }
@@ -486,7 +486,7 @@ security_metrics:
 2. **TLS Encryption**: Use TLS for all external communications
 3. **Authentication**: Implement proper authentication for admin endpoints
 4. **Authorization**: Role-based access control for configuration changes
-5. **Audit Logging**: Comprehensive audit logs for all security events
+5. **Audit Logging**: Audit logs for all security events
 
 ### Operational Security
 

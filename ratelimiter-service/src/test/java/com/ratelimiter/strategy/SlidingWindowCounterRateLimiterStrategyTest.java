@@ -10,8 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
+
 
 import java.time.Clock;
 import java.time.Instant;
@@ -21,6 +20,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 /**
@@ -28,7 +28,6 @@ import static org.mockito.Mockito.when;
  * Tests algorithm logic, window calculations, and error handling without Redis dependencies.
  */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class SlidingWindowCounterRateLimiterStrategyTest {
 
     @Mock
@@ -163,8 +162,11 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
         when(clock.instant()).thenReturn(Instant.ofEpochMilli(currentTime));
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any(), any(), any()))
-            .thenThrow(new RuntimeException("Redis connection failed"));
+        
+        // Use doThrow to avoid stubbing conflicts with other tests
+        doThrow(new RuntimeException("Redis connection failed"))
+            .when(scriptExecutor)
+            .executeList(anyString(), anyList(), anyLong(), anyInt(), anyLong(), anyLong(), anyLong());
         
         // When
         RateLimitResponse response = strategy.execute(request);
@@ -508,6 +510,25 @@ class SlidingWindowCounterRateLimiterStrategyTest {
         // Then: CRITICAL - Must be allowed (this was the bug)
         assertThat(freshWindowResponse.isAllowed()).isTrue();
         assertThat(freshWindowResponse.getRemaining()).isEqualTo(2);
+    }
+
+    @Test
+    void execute_highCostRequests_handlesCorrectly() {
+        // Given - Test with cost=3 against limit=10
+        RateLimitRequest request = createRequest("high-cost-test", 10L, "60s", 3);
+        long currentTime = 1609459200000L;
+        
+        when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
+        when(scriptExecutor.executeList(anyString(), anyList(), 
+            eq(10L), eq(3), eq(currentTime), eq(60000L), eq(120L)))
+            .thenReturn(List.of(1L, 7L, 3L, 0L, 0.0)); // allowed, remaining=7, current=3
+        
+        // When
+        RateLimitResponse response = strategy.execute(request);
+        
+        // Then - Should allow and correctly calculate remaining
+        assertThat(response.isAllowed()).isTrue();
+        assertThat(response.getRemaining()).isEqualTo(7L); // 10 - 3 = 7
     }
 
     private RateLimitRequest createRequest(String key, Long limit, String window, int cost) {

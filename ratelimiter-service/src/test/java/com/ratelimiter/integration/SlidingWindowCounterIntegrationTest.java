@@ -286,12 +286,15 @@ class SlidingWindowCounterIntegrationTest {
         // When - Make a request to create keys
         strategy.execute(request);
 
-        // Then - Keys should have appropriate TTL (2 * window size = 4 seconds)
+        // Then - Keys should have appropriate TTL (max(60, 2 * window size) = 60 seconds for small windows)
         String currentKey = "rate_limit:sliding_window_counter:ttl-test:current";
         Long ttl = redisTemplate.getExpire(currentKey);
         
         assertThat(ttl).isGreaterThan(0);
-        assertThat(ttl).isLessThanOrEqualTo(4); // Should be <= 2 * window size
+        assertThat(ttl).isLessThanOrEqualTo(60); // Should be <= max(60, 2 * window size)
+        
+        // For small windows, TTL should be the minimum of 60 seconds
+        assertThat(ttl).isGreaterThan(50); // Should be close to 60, allowing for execution time
     }
 
     @Test

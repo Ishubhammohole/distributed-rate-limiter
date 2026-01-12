@@ -17,6 +17,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +48,7 @@ class FixedWindowRateLimiterStrategyTest {
         long currentTime = 1609459200000L; // 2021-01-01 00:00:00 UTC
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any()))
+        when(scriptExecutor.executeList(anyString(), anyList(), anyLong(), anyLong(), anyLong(), anyInt()))
             .thenReturn(List.of(1L, 9L, currentTime + 60000L)); // allowed=1, remaining=9, reset in 60s
         
         // Act
@@ -66,7 +67,7 @@ class FixedWindowRateLimiterStrategyTest {
         long currentTime = 1609459200000L;
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any()))
+        when(scriptExecutor.executeList(anyString(), anyList(), anyLong(), anyLong(), anyLong(), anyInt()))
             .thenReturn(List.of(0L, 0L, currentTime + 60000L)); // allowed=0, remaining=0, reset in 60s
         
         // Act
@@ -85,7 +86,7 @@ class FixedWindowRateLimiterStrategyTest {
         long currentTime = 1609459200000L;
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(currentTime);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any()))
+        when(scriptExecutor.executeList(anyString(), anyList(), anyLong(), anyLong(), anyLong(), anyInt()))
             .thenReturn(List.of(1L, 5L, currentTime + 60000L)); // allowed=1, remaining=5, reset in 60s
         
         // Act
@@ -124,8 +125,9 @@ class FixedWindowRateLimiterStrategyTest {
         RateLimitRequest request = createRequest("test-key", 10L, "60s", 1);
         
         when(timeProvider.getCurrentTimestampMillis()).thenReturn(1609459200000L);
-        when(scriptExecutor.executeList(anyString(), anyList(), any(), any(), any(), any()))
-            .thenThrow(new RuntimeException("Redis connection failed"));
+        doThrow(new RuntimeException("Redis connection failed"))
+            .when(scriptExecutor)
+            .executeList(anyString(), anyList(), anyLong(), anyLong(), anyLong(), anyInt());
         
         // Act & Assert
         assertThatThrownBy(() -> strategy.execute(request))

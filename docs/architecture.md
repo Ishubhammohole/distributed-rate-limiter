@@ -2,9 +2,7 @@
 
 ## System Overview
 
-The distributed rate limiter follows a stateless, horizontally scalable architecture where all rate limiting state is maintained in Redis. Each service instance operates independently while maintaining consistency through atomic Lua script execution.
-
-## High-Level Architecture
+The distributed rate limiter is a stateless, horizontally scalable service that provides atomic rate limiting operations across multiple instances using Redis as the coordination layer.
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -19,252 +17,181 @@ The distributed rate limiter follows a stateless, horizontally scalable architec
                                  │
           ┌──────────────────────┼──────────────────────┐
           │                      │                      │
-    ┌─────▼─────┐          ┌─────▼─────┐          ┌─────▼─────┐
-    │Rate Limiter│          │Rate Limiter│          │Rate Limiter│
-    │Instance 1  │          │Instance 2  │          │Instance N  │
-    └─────┬─────┘          └─────┬─────┘          └─────┬─────┘
+┌─────────▼───────┐    ┌─────────▼───────┐    ┌─────────▼───────┐
+│ Rate Limiter    │    │ Rate Limiter    │    │ Rate Limiter    │
+│ Instance 1      │    │ Instance 2      │    │ Instance N      │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
           │                      │                      │
           └──────────────────────┼──────────────────────┘
                                  │
                     ┌─────────────▼─────────────┐
-                    │      Redis Cluster       │
-                    │   (Shared State Store)   │
-                    └──────────────────────────┘
+                    │        Redis             │
+                    │   (Coordination Layer)   │
+                    └───────────────────────────┘
 ```
 
-## Component Architecture
+## Core Components
 
-### Rate Limiter Service Instance
+### 1. Rate Limiter Service
+- **Technology**: Java 17, Spring Boot 3.x
+- **Responsibility**: HTTP API, request validation, algorithm orchestration
+- **Scaling**: Stateless, horizontally scalable
+- **Failure Mode**: Fail-open when Redis unavailable
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                Rate Limiter Instance                        │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
-│  │  REST API       │  │  Metrics        │  │  Health     │  │
-│  │  Controller     │  │  Collector      │  │  Monitor    │  │
-│  └─────────┬───────┘  └─────────┬───────┘  └─────────────┘  │
-│            │                    │                           │
-│  ┌─────────▼─────────────────────▼─────────────────────────┐  │
-│  │              Rate Limit Service                        │  │
-│  └─────────┬───────────────────────────────────────────────┘  │
-│            │                                               │
-│  ┌─────────▼─────────┐  ┌─────────────────┐  ┌─────────────┐  │
-│  │  Algorithm        │  │  Lua Script     │  │  Redis      │  │
-│  │  Implementations  │  │  Manager        │  │  Client     │  │
-│  └───────────────────┘  └─────────────────┘  └─────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+### 2. Strategy Pattern Implementation
+- **Interface**: `RateLimiterStrategy`
+- **Implementations**: Token Bucket, Sliding Window Log, Fixed Window, Sliding Window Counter
+- **Extensibility**: New algorithms can be added without changing core service
+
+### 3. Redis Coordination Layer
+- **Role**: Atomic state management across instances
+- **Technology**: Redis with Lua scripts for atomicity
+- **Data Model**: Algorithm-specific key patterns with TTL-based cleanup
+- **Consistency**: Strong consistency within single Redis instance
+
+### 4. Lua Script Engine
+- **Purpose**: Atomic multi-operation transactions
+- **Benefits**: Eliminates race conditions, reduces network round-trips
+- **Scripts**: One per algorithm, optimized for performance
 
 ## Data Flow
 
 ### Request Processing Flow
 
-1. **Request Ingress**: Client sends rate limit check request
-2. **Validation**: Request parameters validated and sanitized
-3. **Algorithm Selection**: Appropriate algorithm selected based on configuration
-4. **Script Execution**: Lua script executed atomically in Redis
-5. **Decision Processing**: Allow/deny decision processed and metrics recorded
-6. **Response**: Structured response returned to client
-
-### Detailed Flow Diagram
-
 ```
-Client Request
-      │
-      ▼
-┌─────────────┐
-│ Validation  │ ──── Invalid ────► 400 Bad Request
-└─────┬───────┘
-      │ Valid
-      ▼
-┌─────────────┐
-│ Algorithm   │
-│ Selection   │
-└─────┬───────┘
-      │
-      ▼
-┌─────────────┐
-│ Lua Script  │ ──── Redis Down ──► Fail-Open (Allow)
-│ Execution   │
-└─────┬───────┘
-      │ Success
-      ▼
-┌─────────────┐
-│ Metrics     │
-│ Recording   │
-└─────┬───────┘
-      │
-      ▼
-┌─────────────┐
-│ Response    │
-│ Formation   │
-└─────┬───────┘
-      │
-      ▼
-Client Response
+1. HTTP Request → Rate Limiter Service
+2. Request Validation (key, algorithm, limit, window, cost)
+3. Strategy Selection (based on algorithm parameter)
+4. Redis Lua Script Execution (atomic operation)
+5. Response Generation (allowed/denied + metadata)
+6. HTTP Response → Client
 ```
 
-## Key Design Decisions
+### Detailed Sequence
 
-### 1. Stateless Service Design
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Service
+    participant R as Redis
+    
+    C->>S: POST /api/v1/ratelimit/check
+    S->>S: Validate request
+    S->>S: Select strategy
+    S->>R: Execute Lua script (atomic)
+    R->>S: Return result
+    S->>S: Parse response
+    S->>C: Return rate limit decision
+```
 
-**Decision**: All rate limiting state stored in Redis, service instances are stateless.
+## Algorithm Implementations
 
-**Rationale**:
-- Enables horizontal scaling without coordination
-- Simplifies deployment and operations
-- Allows for rolling updates without state loss
-- Provides natural disaster recovery through Redis persistence
+### Token Bucket
+- **Redis Keys**: `rate_limit:token_bucket:{key}`
+- **Data**: `{tokens: number, lastRefill: timestamp}`
+- **Atomicity**: Single Lua script handles refill + consumption
 
-**Trade-offs**:
-- Network latency to Redis on every request
-- Dependency on Redis availability
-- Slightly higher complexity vs. in-memory solutions
+### Sliding Window Log
+- **Redis Keys**: `rate_limit:sliding_window_log:{key}`
+- **Data**: Sorted set of request timestamps
+- **Cleanup**: TTL + periodic cleanup of old entries
 
-### 2. Lua Script Atomicity
+### Fixed Window
+- **Redis Keys**: `rate_limit:fixed_window:{key}:{windowId}`
+- **Data**: Simple counter per window
+- **Cleanup**: TTL-based, automatic window expiration
 
-**Decision**: All rate limiting operations implemented as atomic Lua scripts in Redis.
+### Sliding Window Counter
+- **Redis Keys**: 
+  - `rate_limit:sliding_window_counter:{key}:{currentWindow}`
+  - `rate_limit:sliding_window_counter:{key}:{previousWindow}`
+- **Data**: Integer counters
+- **Approximation**: Weighted sum with floor() function
 
-**Rationale**:
-- Guarantees consistency across distributed instances
-- Eliminates race conditions in concurrent scenarios
-- Reduces network round-trips (single Redis operation)
-- Leverages Redis's single-threaded execution model
+## Consistency Model
 
-**Trade-offs**:
-- Lua script complexity vs. application logic
-- Limited debugging capabilities for scripts
-- Redis version compatibility requirements
+### Strong Consistency
+- **Scope**: Within single Redis instance
+- **Mechanism**: Lua scripts execute atomically
+- **Guarantee**: No race conditions between concurrent requests
 
-### 3. Fail-Open Strategy
+### Eventual Consistency
+- **Scope**: Across Redis replicas (if configured)
+- **Trade-off**: Availability vs consistency
+- **Mitigation**: Single Redis instance for critical applications
 
-**Decision**: When Redis is unavailable, allow all requests (fail-open).
+### Failure Handling
+- **Redis Unavailable**: Fail-open (allow all requests)
+- **Network Partition**: Graceful degradation
+- **Recovery**: Automatic reconnection with exponential backoff
 
-**Rationale**:
-- Prevents rate limiter from becoming single point of failure
-- Maintains service availability during Redis outages
-- Aligns with "availability over consistency" for this use case
+## Performance Characteristics
 
-**Trade-offs**:
-- Temporary loss of rate limiting protection
-- Potential for abuse during outages
-- Requires monitoring to detect fail-open scenarios
+### Latency
+- **Target**: <10ms p99 latency
+- **Bottleneck**: Redis network round-trip
+- **Optimization**: Lua scripts minimize Redis operations
 
-### 4. Algorithm Pluggability
+### Throughput
+- **Target**: 10,000+ RPS per instance
+- **Scaling**: Horizontal scaling of service instances
+- **Limitation**: Single Redis instance throughput
 
-**Decision**: Clean interface for multiple rate limiting algorithms.
+### Memory Usage
+- **Token Bucket**: O(1) per key
+- **Fixed Window**: O(1) per key
+- **Sliding Window Counter**: O(1) per key (2 counters max)
+- **Sliding Window Log**: O(n) per key (n = requests in window)
 
-**Rationale**:
-- Different use cases require different algorithms
-- Allows for algorithm-specific optimizations
-- Enables easy addition of new algorithms
-- Supports A/B testing of algorithm performance
+## Operational Considerations
 
-**Trade-offs**:
-- Additional complexity vs. single algorithm
-- Need for algorithm-specific configuration validation
-- Increased testing surface area
+### Monitoring
+- **Metrics**: Request rates, latency, error rates, Redis health
+- **Dashboards**: Grafana with pre-configured panels
+- **Alerting**: Based on error rates and latency thresholds
 
-## Component Details
+### Deployment
+- **Containerization**: Docker with multi-stage builds
+- **Orchestration**: Kubernetes-ready with health checks
+- **Configuration**: Environment-based with sensible defaults
 
-### REST API Controller
+### Security
+- **Input Validation**: Comprehensive parameter validation
+- **Key Sanitization**: Prevent Redis key injection
+- **Rate Limiting**: Self-protection against abuse
+- **Audit Logging**: Security event logging
 
-**Responsibilities**:
-- HTTP request/response handling
-- Input validation and sanitization
-- Error handling and status code mapping
-- Request/response serialization
-
-**Key Classes**:
-- `RateLimitController`: Main REST endpoint
-- `RateLimitRequest`: Request DTO with validation
-- `RateLimitResponse`: Response DTO
-- `GlobalExceptionHandler`: Centralized error handling
-
-### Rate Limit Service
-
-**Responsibilities**:
-- Core business logic orchestration
-- Algorithm selection and configuration
-- Metrics collection coordination
-- Circuit breaker implementation
-
-**Key Classes**:
-- `RateLimitService`: Main service interface
-- `RateLimitServiceImpl`: Service implementation
-- `CircuitBreakerService`: Redis failure handling
-
-### Algorithm Implementations
-
-**Responsibilities**:
-- Algorithm-specific logic implementation
-- Lua script generation and management
-- Configuration validation
-- Algorithm-specific metrics
-
-**Key Classes**:
-- `RateLimitAlgorithm`: Algorithm interface
-- `TokenBucketAlgorithm`: Token bucket implementation
-- `SlidingWindowLogAlgorithm`: Sliding window log implementation
-- `FixedWindowCounterAlgorithm`: Fixed window implementation
-- `SlidingWindowCounterAlgorithm`: Sliding window counter implementation
-
-### Lua Script Manager
-
-**Responsibilities**:
-- Lua script loading and caching
-- Script execution coordination
-- Error handling for script failures
-- Script versioning and updates
-
-**Key Classes**:
-- `LuaScriptManager`: Script management interface
-- `RedisLuaScriptManager`: Redis-specific implementation
-- `ScriptCache`: In-memory script caching
-
-### Redis Client
-
-**Responsibilities**:
-- Redis connection management
-- Connection pooling optimization
-- Health monitoring
-- Failover handling
-
-**Key Classes**:
-- `RedisConfiguration`: Connection configuration
-- `RedisHealthIndicator`: Health check implementation
-- `RedisMetricsCollector`: Connection metrics
-
-## Scalability Considerations
+## Scalability Patterns
 
 ### Horizontal Scaling
+- **Service Instances**: Add more instances behind load balancer
+- **Redis**: Single instance for consistency, Redis Cluster for scale
+- **Stateless Design**: No local state, all coordination via Redis
 
-- **Stateless Design**: Instances can be added/removed without coordination
-- **Load Distribution**: Any instance can handle any request
-- **Redis Sharding**: Redis cluster support for data distribution
-- **Connection Pooling**: Optimized connection usage per instance
+### Vertical Scaling
+- **Service**: Increase JVM heap, CPU cores
+- **Redis**: Increase memory, optimize configuration
+- **Network**: Higher bandwidth for Redis communication
 
-### Performance Optimization
+### Geographic Distribution
+- **Multi-Region**: Deploy service in multiple regions
+- **Redis Replication**: Cross-region Redis replication
+- **Trade-offs**: Latency vs consistency across regions
 
-- **Script Caching**: Lua scripts cached in Redis and application memory
-- **Connection Pooling**: Lettuce connection pooling for high throughput
-- **Batch Operations**: Where possible, batch multiple operations
-- **Hot Key Handling**: Strategies for handling high-traffic keys
+## Extension Points
 
-### Monitoring and Observability
+### Adding New Algorithms
+1. Implement `RateLimiterStrategy` interface
+2. Create corresponding Lua script
+3. Add algorithm to strategy registry
+4. Write comprehensive tests
 
-- **Comprehensive Metrics**: Request rates, latency, error rates, Redis health
-- **Distributed Tracing**: Request correlation across instances
-- **Health Checks**: Deep health checks including Redis connectivity
-- **Alerting**: Proactive alerting on performance degradation
+### Custom Metrics
+- Implement `MeterRegistry` beans
+- Add custom metrics in strategy implementations
+- Export to monitoring systems
 
-## Security Considerations
-
-- **Input Validation**: Comprehensive validation of all request parameters
-- **Key Sanitization**: Proper sanitization of rate limit keys
-- **DoS Protection**: Built-in protection against various DoS scenarios
-- **Resource Limits**: Configurable limits on key lengths, request sizes
-- **Audit Logging**: Comprehensive logging for security analysis
-
-See [security-abuse.md](security-abuse.md) for detailed security considerations.
+### Alternative Storage
+- Implement alternative coordination layers
+- Replace Redis with other distributed stores
+- Maintain same consistency guarantees

@@ -71,14 +71,80 @@ This service solves these challenges with a stateless, horizontally scalable arc
 | **Token Bucket** | API rate limiting | O(1) | High | Excellent | ✅ Implemented |
 | **Sliding Window Log** | Precise tracking | O(n) | Perfect | Good | ✅ Implemented |
 | **Fixed Window** | Simple quotas | O(1) | Good | Poor | ✅ Implemented |
-| **Sliding Window Counter** | Memory-efficient approximation | O(1) | High | Good | ✅ Implemented |
+| **Sliding Window Counter** | Memory-efficient approximation | O(1) | High (~75-90%) | Good | ✅ Implemented |
 
 ### When to Use Each Algorithm
 
 - **Token Bucket**: Default choice for public APIs. Allows bursts while maintaining average rate.
 - **Sliding Window Log**: When you need perfect accuracy and can afford higher memory usage.
 - **Fixed Window**: Simple quotas with acceptable edge-case bursts at window boundaries.
-- **Sliding Window Counter**: Best balance of accuracy and memory efficiency.
+- **Sliding Window Counter**: Memory-efficient approximation with ~75-90% accuracy. Best for high-scale systems.
+
+### Sliding Window Counter Algorithm
+
+The sliding window counter provides **memory-efficient approximate rate limiting** using only two counters per key. This is an approximation algorithm that trades perfect accuracy for O(1) memory usage.
+
+```
+Time:     0s    5s    10s   15s   20s
+Windows:  [----W1----][----W2----][----W3----]
+                      ^
+                   Current time (12s into W2)
+
+Previous Window (W1): 3 requests
+Current Window (W2):  1 request
+
+Weight calculation:
+- Time into current window: 2s
+- Weight = (10s - 2s) / 10s = 0.8
+- Weighted previous: floor(3 × 0.8) = floor(2.4) = 2
+
+Estimated total: 2 + 1 = 3 requests in sliding window
+```
+
+**Key Characteristics**:
+- **Approximation**: Uses `floor()` function instead of exact timestamp tracking
+- **Memory**: O(1) per key (maximum 2 Redis counters)
+- **Performance**: Sub-millisecond Redis operations
+- **Accuracy**: ~75-90% typical, ~50% worst case at window boundaries
+
+### Approximation Behavior & Tradeoffs
+
+**Why Approximation**:
+- Exact sliding window requires O(n) memory to store all request timestamps
+- This algorithm achieves O(1) memory by using weighted counters
+- Suitable for high-scale systems where memory efficiency is critical
+
+**Error Characteristics**:
+- **Conservative bias**: Tends to allow slightly more requests than exact algorithm
+- **Boundary effects**: Largest errors occur during window transitions
+- **Predictable**: Error patterns are well-understood and documented
+
+**Worst-Case Example**:
+```
+Window: 10s, Limit: 3
+Timeline:
+- 9.6s: Request 1 ✅ (allowed)
+- 9.7s: Request 2 ✅ (allowed) 
+- 9.8s: Request 3 ✅ (allowed)
+- 10.1s: Request 4 ✅ (allowed by approximation)
+
+Exact sliding window at 10.1s:
+- Window: (0.1s, 10.1s]
+- Contains: 4 requests → Should DENY
+
+Sliding window counter at 10.1s:
+- Previous window weight: (10s - 0.1s) / 10s = 0.99
+- Estimated: floor(3 × 0.99) + 1 = 2 + 1 = 3 → ALLOWS
+
+Result: 25% error (allows 4 requests instead of 3)
+```
+
+**When to Use**:
+- ✅ High-scale APIs where memory efficiency is critical
+- ✅ Systems that can tolerate occasional burst allowance
+- ✅ Rate limiting where conservative errors are acceptable
+- ❌ Applications requiring perfect accuracy
+- ❌ Systems where any overage is unacceptable
 
 ## Failure Behavior
 
@@ -88,22 +154,18 @@ This service solves these challenges with a stateless, horizontally scalable arc
 
 **Graceful Degradation**: Under extreme load, prioritizes availability over perfect accuracy.
 
-## Quick Start (3 Commands)
-
-> **⚠️ CURRENT STATUS**: All 4 rate limiting algorithms implemented with Redis integration  
-> Service provides production-ready rate limiting with atomic operations and fail-open behavior.
+## Quick Start
 
 ```bash
-# 1. Start infrastructure (Redis, Prometheus, Grafana)
-docker-compose -f infra/docker-compose.yml up -d
+# 1. Start all services
+docker-compose up -d
 
-# 2. Build and start the service
-cd ratelimiter-service && mvn spring-boot:run
-
-# 3. Test the API with real rate limiting
+# 2. Test the API
 curl -X POST http://localhost:8080/api/v1/ratelimit/check \
   -H "Content-Type: application/json" \
   -d '{"key":"test:user","algorithm":"sliding_window_counter","limit":10,"window":"60s","cost":1}'
+
+# 3. View dashboards at http://localhost:3000 (admin/admin)
 ```
 
 ## Testing
@@ -111,24 +173,44 @@ curl -X POST http://localhost:8080/api/v1/ratelimit/check \
 ### Run All Tests
 ```bash
 cd ratelimiter-service
-mvn test
+./mvnw test
 ```
 
 ### Integration Tests (with Testcontainers)
 ```bash
-mvn test -Dtest="*IntegrationTest"
+./mvnw test -Dtest="*IntegrationTest"
 ```
 
-### Property-Based Tests
+### Reproduction Tests (Manual)
 ```bash
-mvn test -Dtest="*Properties"
+# Run specific reproduction test
+./mvnw test -Dtest=SlidingWindowBoundaryReproTest
+
+# Run all reproduction tests
+./mvnw test -Dtest="com.ratelimiter.repro.*"
 ```
 
 ### Test Coverage
 ```bash
-mvn jacoco:report
+./mvnw jacoco:report
 open target/site/jacoco/index.html
 ```
+
+## Verification Scripts
+
+The service includes verification scripts to validate correctness:
+
+```bash
+# Run all verification tests
+make verify
+
+# Individual verifications
+./scripts/verify-semantic-truth.sh      # Validates approximation behavior
+./scripts/verify-window-boundary.sh     # Tests window transitions
+./scripts/verify-boundary-math.sh       # Verifies mathematical correctness
+```
+
+These scripts test the service end-to-end against Redis to ensure the algorithms work correctly according to their documented behavior and accuracy characteristics.
 
 ## Benchmarking
 
@@ -183,14 +265,14 @@ Results are documented in [docs/benchmarks.md](docs/benchmarks.md).
 **What**: Production-grade distributed rate limiter service  
 **Scale**: 10,000+ RPS, <10ms p99 latency, horizontally scalable  
 **Tech**: Java 17, Spring Boot 3.x, Redis, Lua scripts, Docker  
-**Quality**: >95% test coverage, property-based testing, comprehensive observability  
+**Quality**: >95% test coverage, property-based testing, observability  
 **Ops**: 3-command local setup, fail-open reliability, Grafana dashboards  
 
 **Key Engineering Decisions**:
 - Redis Lua scripts for atomic distributed operations
 - Multiple algorithms optimized for different use cases  
 - Fail-open strategy for high availability
-- Comprehensive property-based testing for correctness
+- Property-based testing for correctness
 - Production-ready observability and operational tooling
 
 ## Architecture

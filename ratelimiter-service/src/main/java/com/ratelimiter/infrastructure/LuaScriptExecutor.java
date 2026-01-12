@@ -51,7 +51,7 @@ public class LuaScriptExecutor {
                 stringArgs[i] = String.valueOf(args[i]);
             }
             
-            return redisTemplate.execute(redisScript, keys, stringArgs);
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -81,7 +81,7 @@ public class LuaScriptExecutor {
                 stringArgs[i] = String.valueOf(args[i]);
             }
             
-            return redisTemplate.execute(redisScript, keys, stringArgs);
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -118,7 +118,7 @@ public class LuaScriptExecutor {
                 stringArgs[i] = String.valueOf(args[i]);
             }
             
-            return redisTemplate.execute(redisScript, keys, stringArgs);
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);

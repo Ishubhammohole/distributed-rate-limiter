@@ -385,4 +385,4 @@ void testRedisFailureHandling() {
 | Instance Failure | < 30 seconds | < 1 minute | None (load balancer) |
 | Redis Recovery | N/A | < 30 seconds | Brief (reconnection) |
 
-The system is designed to maintain **99.9% availability** even during infrastructure failures through its fail-open design and comprehensive failure handling mechanisms.
+The system maintains **99.9% availability** even during infrastructure failures through its fail-open design and failure handling mechanisms.
