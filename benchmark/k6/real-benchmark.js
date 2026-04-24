@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
-import { Rate } from 'k6/metrics';
+import { Rate, Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const SCENARIO = __ENV.SCENARIO || 'hot_key';
@@ -18,6 +18,10 @@ const UNIQUE_KEY_COUNT = 1000;
 
 export const rate_limiter_allowed_rate = new Rate('rate_limiter_allowed_rate');
 export const rate_limiter_blocked_rate = new Rate('rate_limiter_blocked_rate');
+export const rate_limiter_total_latency_ms = new Trend('rate_limiter_total_latency_ms');
+export const rate_limiter_api_processing_ms = new Trend('rate_limiter_api_processing_ms');
+export const rate_limiter_redis_latency_ms = new Trend('rate_limiter_redis_latency_ms');
+export const rate_limiter_serialization_latency_ms = new Trend('rate_limiter_serialization_latency_ms');
 
 export const options = {
   scenarios: {
@@ -103,8 +107,17 @@ export default function () {
     body = null;
   }
 
+  if (__ENV.DEBUG_HEADERS === '1' && exec.scenario.iterationInTest === 0) {
+    console.log(`response_headers=${JSON.stringify(response.headers)}`);
+  }
+
   const allowed = response.status === 200 && body !== null && typeof body.allowed === 'boolean' && body.allowed;
   const blocked = response.status === 200 && body !== null && typeof body.allowed === 'boolean' && !body.allowed;
+
+  recordTimingHeader(response, 'X-RateLimiter-Total-Ms', rate_limiter_total_latency_ms);
+  recordTimingHeader(response, 'X-RateLimiter-Api-Ms', rate_limiter_api_processing_ms);
+  recordTimingHeader(response, 'X-RateLimiter-Redis-Ms', rate_limiter_redis_latency_ms);
+  recordTimingHeader(response, 'X-RateLimiter-Serialization-Ms', rate_limiter_serialization_latency_ms);
 
   rate_limiter_allowed_rate.add(allowed);
   rate_limiter_blocked_rate.add(blocked);
@@ -119,4 +132,25 @@ export default function () {
     'blocked responses include retryAfter': () =>
       body !== null && (!body.allowed ? typeof body.retryAfter === 'string' && body.retryAfter.length > 0 : true),
   });
+}
+
+function recordTimingHeader(response, headerName, metric) {
+  const targetHeader = headerName.toLowerCase();
+  let headerValue = response.headers[headerName] ?? response.headers[headerName.toLowerCase()];
+  if (!headerValue) {
+    for (const [responseHeader, value] of Object.entries(response.headers)) {
+      if (responseHeader.toLowerCase() === targetHeader) {
+        headerValue = value;
+        break;
+      }
+    }
+  }
+  if (!headerValue) {
+    return;
+  }
+
+  const parsed = Number.parseFloat(Array.isArray(headerValue) ? headerValue[0] : headerValue);
+  if (Number.isFinite(parsed)) {
+    metric.add(parsed);
+  }
 }

@@ -1,9 +1,11 @@
 package com.ratelimiter.config;
 
 import com.ratelimiter.domain.RateLimitAlgorithm;
+import com.ratelimiter.profiling.ProfilingProperties;
 import com.ratelimiter.strategy.RateLimiterStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,6 +21,7 @@ import java.util.Map;
  * and provides the strategy map to the service layer.
  */
 @Configuration
+@EnableConfigurationProperties(ProfilingProperties.class)
 public class RateLimiterConfig {
     
     private static final Logger logger = LoggerFactory.getLogger(RateLimiterConfig.class);

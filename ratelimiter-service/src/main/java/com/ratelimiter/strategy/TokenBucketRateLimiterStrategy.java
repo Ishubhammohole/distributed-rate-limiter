@@ -4,9 +4,9 @@ import com.ratelimiter.domain.RateLimitAlgorithm;
 import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.infrastructure.LuaScriptExecutor;
-import com.ratelimiter.infrastructure.RedisTimeProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -25,7 +25,7 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
     private static final Logger logger = LoggerFactory.getLogger(TokenBucketRateLimiterStrategy.class);
     
     private final LuaScriptExecutor scriptExecutor;
-    private final RedisTimeProvider timeProvider;
+    private final com.ratelimiter.infrastructure.RedisTimeProvider timeProvider;
     
     /**
      * Lua script for atomic token bucket operations.
@@ -38,16 +38,16 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
      * 
      * Script inputs:
      * - KEYS[1]: Redis key for this rate limit bucket
-     * - ARGV[1]: current time in milliseconds
-     * - ARGV[2]: bucket capacity (max tokens)
-     * - ARGV[3]: refill rate (tokens per millisecond, as microtokens)
-     * - ARGV[4]: cost (tokens to consume)
+     * - ARGV[1]: bucket capacity (max tokens)
+     * - ARGV[2]: refill rate (tokens per millisecond, as microtokens)
+     * - ARGV[3]: cost (tokens to consume)
      * 
      * Returns: {allowed (1/0), remaining_tokens, reset_time_ms}
      */
     private static final String TOKEN_BUCKET_SCRIPT = """
         local key = KEYS[1]
-        local now_ms = tonumber(ARGV[1])
+        local time = redis.call('TIME')
+        local now_ms = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
         local capacity = tonumber(ARGV[2])
         local refill_rate_micro = tonumber(ARGV[3])  -- microtokens per ms
         local cost = tonumber(ARGV[4])
@@ -94,7 +94,13 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
         return {allowed, math.floor(remaining_tokens_micro / 1000000), reset_time_ms}
         """;
     
-    public TokenBucketRateLimiterStrategy(LuaScriptExecutor scriptExecutor, RedisTimeProvider timeProvider) {
+    @Autowired
+    public TokenBucketRateLimiterStrategy(LuaScriptExecutor scriptExecutor) {
+        this.scriptExecutor = scriptExecutor;
+        this.timeProvider = null;
+    }
+
+    TokenBucketRateLimiterStrategy(LuaScriptExecutor scriptExecutor, com.ratelimiter.infrastructure.RedisTimeProvider timeProvider) {
         this.scriptExecutor = scriptExecutor;
         this.timeProvider = timeProvider;
     }
@@ -109,9 +115,6 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
             double refillRatePerMs = (double) request.getLimit() / windowMs;
             long refillRateMicroPerMs = Math.round(refillRatePerMs * 1_000_000); // Convert to microtokens per ms
             
-            // Get current time from Redis
-            long nowMs = timeProvider.getCurrentTimestampMillis();
-            
             // Build Redis key
             String redisKey = "rl:" + request.getKey() + ":tb";
             
@@ -119,7 +122,7 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
             List<Object> result = scriptExecutor.executeList(
                 TOKEN_BUCKET_SCRIPT,
                 List.of(redisKey),
-                nowMs,
+                currentTimeHintMillis(),
                 request.getLimit(),
                 refillRateMicroPerMs,
                 request.getCost()
@@ -217,5 +220,12 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
             case "d" -> value * 24L * 60L * 60L * 1000L;
             default -> throw new IllegalArgumentException("Unsupported window unit: " + unit + ". Supported: s, m, h, d");
         };
+    }
+
+    private long currentTimeHintMillis() {
+        if (timeProvider == null) {
+            return 0L;
+        }
+        return timeProvider.getCurrentTimestampMillis();
     }
 }

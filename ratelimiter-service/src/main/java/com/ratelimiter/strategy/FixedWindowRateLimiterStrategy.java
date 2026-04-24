@@ -4,9 +4,9 @@ import com.ratelimiter.domain.RateLimitAlgorithm;
 import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.infrastructure.LuaScriptExecutor;
-import com.ratelimiter.infrastructure.RedisTimeProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -26,7 +26,7 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
     private static final Logger logger = LoggerFactory.getLogger(FixedWindowRateLimiterStrategy.class);
     
     private final LuaScriptExecutor scriptExecutor;
-    private final RedisTimeProvider timeProvider;
+    private final com.ratelimiter.infrastructure.RedisTimeProvider timeProvider;
     
     /**
      * Lua script for atomic fixed window operations.
@@ -37,16 +37,16 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
      * 
      * Script inputs:
      * - KEYS[1]: Redis key for this rate limit window
-     * - ARGV[1]: current time in milliseconds
-     * - ARGV[2]: window size in milliseconds
-     * - ARGV[3]: limit (max requests in window)
-     * - ARGV[4]: cost (number of requests this call represents)
+     * - ARGV[1]: window size in milliseconds
+     * - ARGV[2]: limit (max requests in window)
+     * - ARGV[3]: cost (number of requests this call represents)
      * 
      * Returns: {allowed (1/0), remaining_requests, reset_time_ms}
      */
     private static final String FIXED_WINDOW_SCRIPT = """
         local key = KEYS[1]
-        local now_ms = tonumber(ARGV[1])
+        local time = redis.call('TIME')
+        local now_ms = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
         local window_ms = tonumber(ARGV[2])
         local limit = tonumber(ARGV[3])
         local cost = tonumber(ARGV[4])
@@ -83,7 +83,13 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
         return {allowed, remaining_requests, reset_time_ms}
         """;
     
-    public FixedWindowRateLimiterStrategy(LuaScriptExecutor scriptExecutor, RedisTimeProvider timeProvider) {
+    @Autowired
+    public FixedWindowRateLimiterStrategy(LuaScriptExecutor scriptExecutor) {
+        this.scriptExecutor = scriptExecutor;
+        this.timeProvider = null;
+    }
+
+    FixedWindowRateLimiterStrategy(LuaScriptExecutor scriptExecutor, com.ratelimiter.infrastructure.RedisTimeProvider timeProvider) {
         this.scriptExecutor = scriptExecutor;
         this.timeProvider = timeProvider;
     }
@@ -96,9 +102,6 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
             // Parse window to milliseconds
             long windowMs = parseWindowToMilliseconds(request.getWindow());
             
-            // Get current time from Redis
-            long nowMs = timeProvider.getCurrentTimestampMillis();
-            
             // Build Redis key
             String redisKey = "rl:" + request.getKey() + ":fw";
             
@@ -106,7 +109,7 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
             List<Object> result = scriptExecutor.executeList(
                 FIXED_WINDOW_SCRIPT,
                 List.of(redisKey),
-                nowMs,
+                currentTimeHintMillis(),
                 windowMs,
                 request.getLimit(),
                 request.getCost()
@@ -206,5 +209,12 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
             case "d" -> value * 24L * 60L * 60L * 1000L;
             default -> throw new IllegalArgumentException("Unsupported window unit: " + unit + ". Supported: s, m, h, d");
         };
+    }
+
+    private long currentTimeHintMillis() {
+        if (timeProvider == null) {
+            return 0L;
+        }
+        return timeProvider.getCurrentTimestampMillis();
     }
 }

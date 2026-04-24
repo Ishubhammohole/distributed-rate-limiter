@@ -4,9 +4,9 @@ import com.ratelimiter.domain.RateLimitAlgorithm;
 import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.infrastructure.LuaScriptExecutor;
-import com.ratelimiter.infrastructure.RedisTimeProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -26,7 +26,7 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
     private static final Logger logger = LoggerFactory.getLogger(SlidingWindowLogRateLimiterStrategy.class);
     
     private final LuaScriptExecutor scriptExecutor;
-    private final RedisTimeProvider timeProvider;
+    private final com.ratelimiter.infrastructure.RedisTimeProvider timeProvider;
     
     /**
      * Lua script for atomic sliding window log operations.
@@ -39,17 +39,17 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
      * 
      * Script inputs:
      * - KEYS[1]: Redis key for this rate limit window
-     * - ARGV[1]: current time in milliseconds
-     * - ARGV[2]: window size in milliseconds
-     * - ARGV[3]: limit (max requests in window)
-     * - ARGV[4]: cost (number of requests this call represents)
-     * - ARGV[5]: unique request identifier
+     * - ARGV[1]: window size in milliseconds
+     * - ARGV[2]: limit (max requests in window)
+     * - ARGV[3]: cost (number of requests this call represents)
+     * - ARGV[4]: unique request identifier
      * 
      * Returns: {allowed (1/0), remaining_requests, reset_time_ms}
      */
     private static final String SLIDING_WINDOW_LOG_SCRIPT = """
         local key = KEYS[1]
-        local now_ms = tonumber(ARGV[1])
+        local time = redis.call('TIME')
+        local now_ms = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
         local window_ms = tonumber(ARGV[2])
         local limit = tonumber(ARGV[3])
         local cost = tonumber(ARGV[4])
@@ -100,7 +100,13 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
         return {allowed, remaining_requests, reset_time_ms}
         """;
     
-    public SlidingWindowLogRateLimiterStrategy(LuaScriptExecutor scriptExecutor, RedisTimeProvider timeProvider) {
+    @Autowired
+    public SlidingWindowLogRateLimiterStrategy(LuaScriptExecutor scriptExecutor) {
+        this.scriptExecutor = scriptExecutor;
+        this.timeProvider = null;
+    }
+
+    SlidingWindowLogRateLimiterStrategy(LuaScriptExecutor scriptExecutor, com.ratelimiter.infrastructure.RedisTimeProvider timeProvider) {
         this.scriptExecutor = scriptExecutor;
         this.timeProvider = timeProvider;
     }
@@ -113,20 +119,17 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
             // Parse window to milliseconds
             long windowMs = parseWindowToMilliseconds(request.getWindow());
             
-            // Get current time from Redis
-            long nowMs = timeProvider.getCurrentTimestampMillis();
-            
             // Build Redis key
             String redisKey = "rl:" + request.getKey() + ":swl";
             
             // Generate unique request identifier
-            String requestId = generateRequestId(request.getKey(), nowMs);
+            String requestId = generateRequestId(request.getKey());
             
             // Execute Lua script
             List<Object> result = scriptExecutor.executeList(
                 SLIDING_WINDOW_LOG_SCRIPT,
                 List.of(redisKey),
-                nowMs,
+                currentTimeHintMillis(),
                 windowMs,
                 request.getLimit(),
                 request.getCost(),
@@ -233,12 +236,19 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
      * Generate a unique request identifier for this request.
      * Uses key and timestamp to ensure uniqueness across concurrent requests.
      */
-    private String generateRequestId(String key, long timestampMs) {
+    private String generateRequestId(String key) {
         // Use a combination of key hash and timestamp to ensure uniqueness
         // Add thread ID to handle high concurrency on same key
         return String.format("%d_%d_%d", 
             key.hashCode(), 
-            timestampMs, 
+            System.nanoTime(), 
             Thread.currentThread().getId());
+    }
+
+    private long currentTimeHintMillis() {
+        if (timeProvider == null) {
+            return 0L;
+        }
+        return timeProvider.getCurrentTimestampMillis();
     }
 }

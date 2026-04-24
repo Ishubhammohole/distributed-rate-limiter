@@ -1,0 +1,8 @@
+rate-limiter:
+  profiling:
+    enabled: true
+    log-per-request: true
+
+logging:
+  level:
+    com.ratelimiter.profiling: INFO

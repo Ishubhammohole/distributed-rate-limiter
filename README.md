@@ -240,11 +240,38 @@ Measured on **April 24, 2026** on a **local Apple M3 machine (8 logical CPUs, 8 
 
 | Scenario | Achieved RPS | p95 Latency | p99 Latency | HTTP Error Rate | Success Rate (checks) | Allowed Rate | Blocked Rate |
 |----------|--------------|-------------|-------------|------------------|------------------------|--------------|--------------|
-| **Single key (hot key)** | 3407.96 | 603.58 ms | 931.12 ms | 0.00% | 100.00% | 75.86% | 24.14% |
-| **1K unique keys** | 4331.98 | 324.97 ms | 1093.40 ms | 0.00% | 100.00% | 100.00% | 0.00% |
-| **Mixed traffic (burst + steady)** | 4118.47 | 392.07 ms | 531.38 ms | 0.00% | 100.00% | 98.03% | 1.97% |
+| **Single key (hot key)** | 2580.47 | 739.06 ms | 1506.02 ms | 1.58% | 98.68% | 39.27% | 59.15% |
+| **1K unique keys** | 1294.96 | 2384.91 ms | 4310.80 ms | 1.56% | 98.57% | 98.44% | 0.00% |
+| **Mixed traffic (burst + steady)** | 498.89 | 5001.37 ms | 5019.01 ms | 13.42% | 86.63% | 86.58% | 0.00% |
 
-Latency distribution was captured from k6 `http_req_duration` and stored in `benchmark/results/real_benchmark.json` with `min`, `p50`, `p90`, `p95`, `p99`, `avg`, and `max` for every scenario.
+Latency distribution and server-side timing breakdowns are captured in `benchmark/results/real_benchmark.json` with `avg`, `p50`, `p90`, `p95`, `p99`, and `max` values.
+
+### Latency Optimization Results
+
+The current optimization pass did **not** achieve the target of sub-100 ms p95 at `5000 req/s` in the Docker Compose benchmark. The measurements below are real post-change results and should be read as the current state, not the intended target.
+
+| Scenario | Before RPS | After RPS | Before p95 | After p95 | Before p99 | After p99 | Before Error Rate | After Error Rate |
+|----------|------------|-----------|------------|-----------|------------|-----------|-------------------|------------------|
+| **Single key (hot key)** | 3407.96 | 2580.47 | 603.58 ms | 739.06 ms | 931.12 ms | 1506.02 ms | 0.00% | 1.58% |
+| **1K unique keys** | 4331.98 | 1294.96 | 324.97 ms | 2384.91 ms | 1093.40 ms | 4310.80 ms | 0.00% | 1.56% |
+| **Mixed traffic (burst + steady)** | 4118.47 | 498.89 | 392.07 ms | 5001.37 ms | 531.38 ms | 5019.01 ms | 0.00% | 13.42% |
+
+What did improve is the server-side breakdown instrumentation:
+
+- The service now exports measured total, API, Redis, and serialization timings per request.
+- In the Docker hot-key benchmark, server-side `rate_limiter_total_latency_ms` was `p95 266.86 ms` and Redis-only time was `p95 231.27 ms`.
+- In the local-Redis hot-key comparison, server-side `rate_limiter_total_latency_ms` improved to `p95 78.49 ms` and Redis-only time improved to `p95 74.42 ms`.
+
+### Docker Vs Local Redis
+
+To isolate Docker networking effects, the hot-key scenario was also run with the service on the host JVM (`http://localhost:18081`) and Redis on the host (`redis-server 8.4.0` on port `6380`). Results are stored in `benchmark/results/hot_key_local_redis_comparison.json`.
+
+| Hot-Key Environment | Achieved RPS | HTTP p95 | HTTP p99 | HTTP Error Rate | Server Total p95 | Redis p95 |
+|---------------------|--------------|----------|----------|------------------|------------------|-----------|
+| **Docker service + Docker Redis** | 2580.47 | 739.06 ms | 1506.02 ms | 1.58% | 266.86 ms | 231.27 ms |
+| **Host JVM service + Host Redis** | 4090.35 | 161.28 ms | 757.30 ms | 2.07% | 78.49 ms | 74.42 ms |
+
+The local-Redis comparison still missed the sub-100 ms HTTP p95 target and showed intermittent client-side socket errors (`can't assign requested address`), but it was materially faster than the Docker-to-Docker hot-key path and suggests that network/runtime placement is a major contributor to tail latency.
 
 ## Observability
 

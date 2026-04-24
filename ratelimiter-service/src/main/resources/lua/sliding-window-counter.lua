@@ -3,21 +3,21 @@
 -- that automatically handle window transitions without complex rotation logic.
 
 -- Input Parameters:
--- KEYS[1] = currentWindowKey - Redis key for current window (includes window timestamp)
--- KEYS[2] = previousWindowKey - Redis key for previous window (includes window timestamp)
+-- KEYS[1] = keyPrefix - Redis key prefix for the sliding window counter
 -- ARGV[1] = limit - Rate limit threshold (number)
 -- ARGV[2] = cost - Request cost, typically 1 (number)
--- ARGV[3] = nowMillis - Current timestamp in milliseconds (number)
+-- ARGV[3] = currentTimeHint - Optional time hint for tests, ignored in production
 -- ARGV[4] = windowSizeMillis - Window size in milliseconds (number)
 -- ARGV[5] = ttlSeconds - TTL for counter keys (number)
 
-local currentWindowKey = KEYS[1]
-local previousWindowKey = KEYS[2]
+local keyPrefix = KEYS[1]
 local limit = tonumber(ARGV[1])
 local cost = tonumber(ARGV[2])
-local nowMillis = tonumber(ARGV[3])
 local windowSizeMillis = tonumber(ARGV[4])
 local ttlSeconds = tonumber(ARGV[5])
+
+local time = redis.call('TIME')
+local nowMillis = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
 
 -- Validate input parameters
 if not limit or limit <= 0 then
@@ -35,6 +35,11 @@ end
 if not ttlSeconds or ttlSeconds <= 0 then
     return redis.error_reply("Invalid ttlSeconds: must be positive number")
 end
+
+local currentWindow = math.floor(nowMillis / windowSizeMillis)
+local previousWindow = currentWindow - 1
+local currentWindowKey = keyPrefix .. ":" .. currentWindow
+local previousWindowKey = keyPrefix .. ":" .. previousWindow
 
 -- Get current and previous window counters (simple integers now)
 local currentCount = tonumber(redis.call('GET', currentWindowKey) or 0)
@@ -77,8 +82,8 @@ if estimatedCount + cost <= limit then
         remaining = 0
     end
     
-    -- Return: [allowed=1, remaining, currentCount, previousCount, weight]
-    return {1, remaining, newCurrentCount, previousCount, weight}
+    -- Return: [allowed=1, remaining, currentCount, previousCount, weight, currentWindow, nowMillis]
+    return {1, remaining, newCurrentCount, previousCount, weight, currentWindow, nowMillis}
 else
     -- Rate limited: do not increment counter
     local remaining = limit - estimatedCount
@@ -90,6 +95,6 @@ else
     local retryAfterMillis = currentWindowStart + windowSizeMillis - nowMillis
     local retryAfterSeconds = math.ceil(retryAfterMillis / 1000)
     
-    -- Return: [allowed=0, remaining, currentCount, previousCount, weight, retryAfterSeconds]
-    return {0, remaining, currentCount, previousCount, weight, retryAfterSeconds}
+    -- Return: [allowed=0, remaining, currentCount, previousCount, weight, currentWindow, nowMillis, retryAfterSeconds]
+    return {0, remaining, currentCount, previousCount, weight, currentWindow, nowMillis, retryAfterSeconds}
 end

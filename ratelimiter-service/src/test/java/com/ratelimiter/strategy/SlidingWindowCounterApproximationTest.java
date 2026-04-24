@@ -92,11 +92,9 @@ class SlidingWindowCounterApproximationTest {
         // Validate Lua script contains distinctive header
         assertThat(scriptCaptor.getValue()).contains("-- Sliding Window Counter Rate Limiter with Window-Scoped Keys");
         
-        // Validate KEYS follow expected format with correct window IDs
+        // Validate KEYS use the optimized key prefix contract and let Lua derive window-specific keys.
         List<String> capturedKeys = keysCaptor.getValue();
-        assertThat(capturedKeys).hasSize(2);
-        assertThat(capturedKeys.get(0)).isEqualTo("rate_limit:sliding_window_counter:test-key:100"); // current window
-        assertThat(capturedKeys.get(1)).isEqualTo("rate_limit:sliding_window_counter:test-key:99");  // previous window
+        assertThat(capturedKeys).containsExactly("rate_limit:sliding_window_counter:test-key");
         
         // Validate ARGV parameters match test expectations
         assertThat(limitCaptor.getValue()).isEqualTo(3L);

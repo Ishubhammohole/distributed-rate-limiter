@@ -1,0 +1,78 @@
+{
+  "measured_at": "2026-04-24",
+  "scenario": "hot_key",
+  "load_profile": {
+    "executor": "constant-arrival-rate",
+    "rate": 5000,
+    "timeUnit": "1s",
+    "duration": "60s",
+    "preAllocatedVUs": 200,
+    "maxVUs": 1000
+  },
+  "docker_redis": {
+    "service_base_url": "http://127.0.0.1:18080",
+    "redis_runtime": "redis in Docker Compose",
+    "throughput_rps": 2580.466488400292,
+    "http_req_failed_rate": 0.01584356724207661,
+    "success_rate": 0.9867777685050255,
+    "latency_distribution_ms": {
+      "avg": 372.0688262985263,
+      "p50": 314.355,
+      "p95": 739.0613999999997,
+      "p99": 1506.0225999999998,
+      "max": 5017.355
+    },
+    "server_breakdown_ms": {
+      "total": {
+        "avg": 71.28790578151606,
+        "p50": 14.261,
+        "p95": 266.8630999999998,
+        "p99": 1081.8448199999993,
+        "max": 4538.203
+      },
+      "redis": {
+        "avg": 50.54524238708135,
+        "p50": 12.958,
+        "p95": 231.27279999999993,
+        "p99": 483.43282,
+        "max": 1296.135
+      }
+    },
+    "source_summary": "benchmark/results/hot_key-summary.json"
+  },
+  "local_redis": {
+    "service_base_url": "http://localhost:18081",
+    "redis_runtime": "redis-server 8.4.0 on host port 6380",
+    "throughput_rps": 4090.346419198671,
+    "http_req_failed_rate": 0.020705536936435533,
+    "success_rate": 0.9812356911726551,
+    "latency_distribution_ms": {
+      "avg": 43.85846923812219,
+      "p50": 4.382,
+      "p95": 161.27819999999997,
+      "p99": 757.2972399999995,
+      "max": 3570.991
+    },
+    "server_breakdown_ms": {
+      "total": {
+        "avg": 15.163473181472057,
+        "p50": 1.208,
+        "p95": 78.49149999999995,
+        "p99": 194.06491999999997,
+        "max": 3508.353
+      },
+      "redis": {
+        "avg": 13.933552947209764,
+        "p50": 1.062,
+        "p95": 74.41869999999999,
+        "p99": 175.54979999999995,
+        "max": 3462.454
+      }
+    },
+    "notes": [
+      "Measured with the service running on the host JVM and Redis running on the host.",
+      "The k6 run reported intermittent client-side connect errors: 'can't assign requested address'."
+    ],
+    "source_summary": "benchmark/results/hot_key-local-redis-summary.json"
+  }
+}

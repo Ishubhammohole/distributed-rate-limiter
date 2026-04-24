@@ -53,6 +53,11 @@
             <artifactId>lettuce-core</artifactId>
             <version>${lettuce.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
         
         <!-- Metrics and Monitoring -->
         <dependency>

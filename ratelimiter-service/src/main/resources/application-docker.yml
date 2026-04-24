@@ -8,10 +8,15 @@ spring:
         pool:
           max-active: 100
           max-idle: 20
-          min-idle: 5
-          max-wait: 2000ms
+          min-idle: 10
+          max-wait: 100ms
 
 logging:
   level:
-    com.ratelimiter: DEBUG
-    org.springframework.data.redis: INFO
+    com.ratelimiter: INFO
+    org.springframework.data.redis: WARN
+
+rate-limiter:
+  profiling:
+    enabled: true
+    log-per-request: false

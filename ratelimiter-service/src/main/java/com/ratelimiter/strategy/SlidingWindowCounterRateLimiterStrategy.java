@@ -4,10 +4,10 @@ import com.ratelimiter.domain.RateLimitAlgorithm;
 import com.ratelimiter.dto.RateLimitRequest;
 import com.ratelimiter.dto.RateLimitResponse;
 import com.ratelimiter.infrastructure.LuaScriptExecutor;
-import com.ratelimiter.infrastructure.RedisTimeProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -36,7 +36,7 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     private static final Logger logger = LoggerFactory.getLogger(SlidingWindowCounterRateLimiterStrategy.class);
     
     private final LuaScriptExecutor scriptExecutor;
-    private final RedisTimeProvider timeProvider;
+    private final com.ratelimiter.infrastructure.RedisTimeProvider timeProvider;
     private final Clock clock;
     private final String luaScript;
     
@@ -46,9 +46,19 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
      */
     private static final String KEY_PREFIX = "rate_limit:sliding_window_counter:";
     
+    @Autowired
     public SlidingWindowCounterRateLimiterStrategy(
             LuaScriptExecutor scriptExecutor, 
-            RedisTimeProvider timeProvider,
+            Clock clock) {
+        this.scriptExecutor = scriptExecutor;
+        this.timeProvider = null;
+        this.clock = clock;
+        this.luaScript = loadLuaScript();
+    }
+
+    SlidingWindowCounterRateLimiterStrategy(
+            LuaScriptExecutor scriptExecutor,
+            com.ratelimiter.infrastructure.RedisTimeProvider timeProvider,
             Clock clock) {
         this.scriptExecutor = scriptExecutor;
         this.timeProvider = timeProvider;
@@ -62,15 +72,8 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
         
         try {
             long windowSizeMillis = parseWindowToMilliseconds(request.getWindow());
-            long currentTimeMillis = timeProvider.getCurrentTimestampMillis();
-            
-            // Calculate window boundaries
-            long currentWindow = calculateCurrentWindow(currentTimeMillis, windowSizeMillis);
-            long previousWindow = currentWindow - 1;
-            
-            // Build window-scoped Redis keys (includes window timestamp)
-            String currentWindowKey = buildWindowScopedKey(request.getKey(), currentWindow);
-            String previousWindowKey = buildWindowScopedKey(request.getKey(), previousWindow);
+            String keyPrefix = buildKeyPrefix(request.getKey());
+            long currentTimeHintMillis = currentTimeHintMillis();
             
             // Calculate TTL (2x window size to ensure previous window availability)
             long ttlSeconds = Math.max(60L, (windowSizeMillis * 2) / 1000L);
@@ -78,15 +81,16 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             // Execute Lua script atomically with simplified parameters
             List<Object> result = scriptExecutor.executeList(
                 luaScript,
-                List.of(currentWindowKey, previousWindowKey),
+                List.of(keyPrefix),
                 request.getLimit(),
                 request.getCost(),
-                currentTimeMillis,
+                currentTimeHintMillis,
                 windowSizeMillis,
                 ttlSeconds
             );
             
-            // Parse script results: [allowed, remaining, currentCount, previousCount, weight, retryAfterSeconds?]
+            // Parse script results:
+            // allowed, remaining, currentCount, previousCount, weight, currentWindow, nowMillis, retryAfterSeconds?
             if (result.isEmpty()) {
                 throw new RuntimeException("Lua script returned empty result");
             }
@@ -97,7 +101,18 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             long previousCount = ((Number) result.get(3)).longValue();
             double actualWeight = result.size() > 4 ? ((Number) result.get(4)).doubleValue() : 0.0;
             
-            // Calculate reset time (next window boundary)
+            boolean hasExtendedTimingFields = result.size() >= 7;
+
+            long currentTimeMillis = hasExtendedTimingFields
+                    ? ((Number) result.get(6)).longValue()
+                    : currentTimeHintMillis;
+            if (currentTimeMillis <= 0) {
+                currentTimeMillis = Instant.now(clock).toEpochMilli();
+            }
+            long currentWindow = hasExtendedTimingFields
+                    ? ((Number) result.get(5)).longValue()
+                    : currentTimeMillis / windowSizeMillis;
+
             Instant resetTime = calculateResetTime(currentWindow, windowSizeMillis);
             
             if (allowed == 1) {
@@ -106,8 +121,11 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
                 return RateLimitResponse.allowed(remaining, resetTime);
             } else {
                 // Get retryAfter from Lua script if available, otherwise calculate
-                long retryAfterSeconds = result.size() > 5 ? ((Number) result.get(5)).longValue() : 
-                    (resetTime.toEpochMilli() - currentTimeMillis) / 1000L;
+                long retryAfterSeconds = result.size() >= 8
+                        ? ((Number) result.get(7)).longValue()
+                        : result.size() == 6
+                                ? ((Number) result.get(5)).longValue()
+                                : (resetTime.toEpochMilli() - currentTimeMillis) / 1000L;
                 
                 logger.info("Rate limit exceeded: key={}, algorithm=sliding_window_counter, limit={}, window={}ms, remaining={}, current={}, previous={}, weight={}, retryAfter={}s", 
                     sanitizeKey(request.getKey()), request.getLimit(), windowSizeMillis, remaining, currentCount, previousCount, String.format("%.3f", actualWeight), retryAfterSeconds);
@@ -159,18 +177,6 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     }
     
     /**
-     * Calculate current window identifier based on timestamp and window size.
-     * Windows are aligned to epoch boundaries for consistency across instances.
-     * 
-     * @param currentTimeMillis current timestamp in milliseconds
-     * @param windowSizeMillis window size in milliseconds
-     * @return current window identifier
-     */
-    private long calculateCurrentWindow(long currentTimeMillis, long windowSizeMillis) {
-        return currentTimeMillis / windowSizeMillis;
-    }
-    
-    /**
      * Calculate the reset time (next window boundary).
      * 
      * @param currentWindow current window identifier
@@ -183,15 +189,13 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
     }
     
     /**
-     * Build window-scoped Redis key that includes the window timestamp.
-     * This automatically handles window transitions without complex rotation logic.
+     * Build Redis key prefix for the sliding window counter.
      * 
      * @param key user-provided rate limit key
-     * @param windowId window identifier (timestamp / windowSize)
-     * @return Redis key scoped to specific window
+     * @return Redis key prefix
      */
-    private String buildWindowScopedKey(String key, long windowId) {
-        return KEY_PREFIX + key + ":" + windowId;
+    private String buildKeyPrefix(String key) {
+        return KEY_PREFIX + key;
     }
     
     /**
@@ -258,5 +262,12 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
         if (key == null) return "null";
         if (key.length() <= 32) return key;
         return key.substring(0, 16) + "..." + key.substring(key.length() - 8);
+    }
+
+    private long currentTimeHintMillis() {
+        if (timeProvider == null) {
+            return 0L;
+        }
+        return timeProvider.getCurrentTimestampMillis();
     }
 }

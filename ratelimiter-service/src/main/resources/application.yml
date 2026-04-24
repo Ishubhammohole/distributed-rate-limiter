@@ -14,8 +14,8 @@ spring:
         pool:
           max-active: 100
           max-idle: 20
-          min-idle: 5
-          max-wait: 2000ms
+          min-idle: 10
+          max-wait: 100ms
 
 management:
   endpoints:
@@ -37,7 +37,7 @@ management:
 logging:
   level:
     com.ratelimiter: INFO
-    org.springframework.data.redis: DEBUG
+    org.springframework.data.redis: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
@@ -50,3 +50,6 @@ rate-limiter:
     script-cache-size: 100
     connection-timeout: 2000ms
     command-timeout: 1000ms
+  profiling:
+    enabled: false
+    log-per-request: false

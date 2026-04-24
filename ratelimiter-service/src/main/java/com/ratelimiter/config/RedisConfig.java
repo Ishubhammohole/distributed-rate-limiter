@@ -2,6 +2,7 @@ package com.ratelimiter.config;
 
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +10,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -31,7 +33,6 @@ public class RedisConfig {
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory() {
-        // Configure Redis standalone connection
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
         config.setHostName(redisProperties.getHost());
         config.setPort(redisProperties.getPort());
@@ -42,7 +43,6 @@ public class RedisConfig {
             config.setDatabase(redisProperties.getDatabase());
         }
 
-        // Configure Lettuce client options for rate limiting workload
         SocketOptions socketOptions = SocketOptions.builder()
                 .connectTimeout(Duration.ofMillis(2000))
                 .keepAlive(true)
@@ -53,12 +53,28 @@ public class RedisConfig {
                 .autoReconnect(true)
                 .build();
 
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
+        RedisProperties.Pool pool = redisProperties.getLettuce().getPool();
+        poolConfig.setMaxTotal(pool.getMaxActive());
+        poolConfig.setMaxIdle(pool.getMaxIdle());
+        poolConfig.setMinIdle(pool.getMinIdle());
+        poolConfig.setMaxWait(pool.getMaxWait());
+        poolConfig.setBlockWhenExhausted(true);
+        poolConfig.setTestOnBorrow(true);
+        poolConfig.setTestWhileIdle(true);
+        poolConfig.setTimeBetweenEvictionRuns(Duration.ofSeconds(30));
+
+        LettuceClientConfiguration clientConfig = LettucePoolingClientConfiguration.builder()
+                .poolConfig(poolConfig)
                 .clientOptions(clientOptions)
                 .commandTimeout(redisProperties.getTimeout())
+                .shutdownTimeout(Duration.ZERO)
                 .build();
 
-        return new LettuceConnectionFactory(config, clientConfig);
+        LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(config, clientConfig);
+        connectionFactory.setShareNativeConnection(false);
+        connectionFactory.setValidateConnection(true);
+        return connectionFactory;
     }
 
     @Bean

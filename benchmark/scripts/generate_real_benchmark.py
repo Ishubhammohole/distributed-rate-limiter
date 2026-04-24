@@ -34,6 +34,10 @@ def scenario_result(summary, scenario_name):
     http_reqs = read_metric(summary, "http_reqs")
     allowed = read_metric(summary, "rate_limiter_allowed_rate")
     blocked = read_metric(summary, "rate_limiter_blocked_rate")
+    total_latency = read_metric(summary, "rate_limiter_total_latency_ms")
+    api_latency = read_metric(summary, "rate_limiter_api_processing_ms")
+    redis_latency = read_metric(summary, "rate_limiter_redis_latency_ms")
+    serialization_latency = read_metric(summary, "rate_limiter_serialization_latency_ms")
 
     return {
         "scenario": scenario_name,
@@ -51,8 +55,24 @@ def scenario_result(summary, scenario_name):
             "p99": duration.get("p(99)"),
             "max": duration.get("max"),
         },
+        "server_breakdown_ms": {
+            "total": trend_values(total_latency),
+            "api_processing": trend_values(api_latency),
+            "redis": trend_values(redis_latency),
+            "serialization": trend_values(serialization_latency),
+        },
         "raw_summary_file": f"{scenario_name}-summary.json",
         "raw_stdout_log": f"{scenario_name}.log",
+    }
+
+
+def trend_values(metric):
+    return {
+        "avg": metric.get("avg"),
+        "p50": metric.get("p(50)", metric.get("med")),
+        "p95": metric.get("p(95)"),
+        "p99": metric.get("p(99)"),
+        "max": metric.get("max"),
     }
 
 
