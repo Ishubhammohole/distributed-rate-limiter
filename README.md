@@ -14,7 +14,7 @@ This service solves these challenges with a stateless, horizontally scalable arc
 
 ## System Guarantees
 
-✅ **Performance**: <10ms p99 latency, 10,000+ RPS per instance  
+✅ **Performance**: Reproducible k6 benchmark suite with measured results captured in-repo  
 ✅ **Consistency**: Atomic operations across distributed instances  
 ✅ **Availability**: Fail-open behavior when Redis is unavailable  
 ✅ **Accuracy**: Precise rate limiting with configurable algorithms  
@@ -214,24 +214,37 @@ These scripts test the service end-to-end against Redis to ensure the algorithms
 
 ## Benchmarking
 
-### Load Testing with K6
+### Reproducible Benchmark Run
 ```bash
-# Throughput test (10,000+ RPS target)
-k6 run loadtest/k6/throughput-test.js
-
-# Latency test (<10ms p99 target)
-k6 run loadtest/k6/latency-test.js
-
-# Multi-instance test
-k6 run loadtest/k6/distributed-test.js
+make benchmark
 ```
 
-### Performance Validation
-```bash
-./scripts/benchmark.sh
-```
+This runs three real k6 scenarios using the `constant-arrival-rate` executor with:
 
-Results are documented in [docs/benchmarks.md](docs/benchmarks.md).
+- `rate: 5000 req/s`
+- `duration: 60s`
+- `preAllocatedVUs: 200`
+- `maxVUs: 1000`
+- no artificial sleeps
+
+Artifacts are written to:
+
+- `benchmark/results/real_benchmark.json`
+- `benchmark/results/hot_key-summary.json`
+- `benchmark/results/unique_keys_1k-summary.json`
+- `benchmark/results/mixed_traffic-summary.json`
+
+### Verified Benchmark Results (Measured)
+
+Measured on **April 24, 2026** on a **local Apple M3 machine (8 logical CPUs, 8 GB RAM)** with the **rate-limiter service and Redis running in Docker Compose**. Benchmark traffic was sent to `http://127.0.0.1:18080`.
+
+| Scenario | Achieved RPS | p95 Latency | p99 Latency | HTTP Error Rate | Success Rate (checks) | Allowed Rate | Blocked Rate |
+|----------|--------------|-------------|-------------|------------------|------------------------|--------------|--------------|
+| **Single key (hot key)** | 3407.96 | 603.58 ms | 931.12 ms | 0.00% | 100.00% | 75.86% | 24.14% |
+| **1K unique keys** | 4331.98 | 324.97 ms | 1093.40 ms | 0.00% | 100.00% | 100.00% | 0.00% |
+| **Mixed traffic (burst + steady)** | 4118.47 | 392.07 ms | 531.38 ms | 0.00% | 100.00% | 98.03% | 1.97% |
+
+Latency distribution was captured from k6 `http_req_duration` and stored in `benchmark/results/real_benchmark.json` with `min`, `p50`, `p90`, `p95`, `p99`, `avg`, and `max` for every scenario.
 
 ## Observability
 
@@ -263,7 +276,7 @@ Results are documented in [docs/benchmarks.md](docs/benchmarks.md).
 ## Recruiter TL;DR
 
 **What**: Production-grade distributed rate limiter service  
-**Scale**: 10,000+ RPS, <10ms p99 latency, horizontally scalable  
+**Scale**: Measured locally at 3.4K-4.3K req/s depending on traffic pattern; horizontally scalable design  
 **Tech**: Java 17, Spring Boot 3.x, Redis, Lua scripts, Docker  
 **Quality**: >95% test coverage, property-based testing, observability  
 **Ops**: 3-command local setup, fail-open reliability, Grafana dashboards  

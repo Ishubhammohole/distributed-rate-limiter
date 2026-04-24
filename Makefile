@@ -1,4 +1,4 @@
-.PHONY: help test verify run clean fmt docker-up docker-down
+.PHONY: help test verify run clean fmt docker-up docker-down benchmark
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -39,3 +39,6 @@ build: ## Build the application
 
 package: ## Package the application
 	cd ratelimiter-service && ./mvnw package -DskipTests
+
+benchmark: ## Run real k6 benchmarks and store measured results
+	bash benchmark/run-real-benchmark.sh
