@@ -1,3 +1,11 @@
+server:
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 20
+    max-connections: 8192
+    accept-count: 1000
+
 spring:
   data:
     redis:
@@ -6,17 +14,12 @@ spring:
       timeout: 2000ms
       lettuce:
         pool:
-          max-active: 100
-          max-idle: 20
-          min-idle: 10
-          max-wait: 100ms
+          max-active: 400
+          max-idle: 100
+          min-idle: 20
+          max-wait: 500ms
 
 logging:
   level:
     com.ratelimiter: INFO
     org.springframework.data.redis: WARN
-
-rate-limiter:
-  profiling:
-    enabled: true
-    log-per-request: false

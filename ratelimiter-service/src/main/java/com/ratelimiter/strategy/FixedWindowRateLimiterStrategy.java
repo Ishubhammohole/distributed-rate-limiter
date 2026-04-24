@@ -133,7 +133,7 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
             }
             
         } catch (Exception e) {
-            logger.error("Fixed window execution failed for key={}", request.getKey(), e);
+            logger.warn("Fixed window execution failed for key={}: {}", request.getKey(), e.getMessage());
             throw new RuntimeException("Fixed window rate limiting failed", e);
         }
     }

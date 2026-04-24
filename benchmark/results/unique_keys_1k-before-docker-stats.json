@@ -1,0 +1,2 @@
+{"BlockIO":"0B / 32.8kB","CPUPerc":"203.18%","Container":"rate-limiter-service","ID":"9a7c2de10dfb","MemPerc":"13.50%","MemUsage":"529.3MiB / 3.828GiB","Name":"rate-limiter-service","NetIO":"4.2MB / 5.2MB","PIDs":"449"}
+{"BlockIO":"1.1MB / 0B","CPUPerc":"0.20%","Container":"rate-limiter-redis","ID":"2f06a2ce68a4","MemPerc":"0.33%","MemUsage":"12.87MiB / 3.828GiB","Name":"rate-limiter-redis","NetIO":"2.14MB / 916kB","PIDs":"6"}

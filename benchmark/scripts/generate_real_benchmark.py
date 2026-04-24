@@ -77,14 +77,19 @@ def trend_values(metric):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 8:
         raise SystemExit(
-            "Usage: generate_real_benchmark.py <results_dir> <output_json> <environment_json>"
+            "Usage: generate_real_benchmark.py <results_dir> <output_json> <environment_json> "
+            "<rate> <duration> <pre_allocated_vus> <max_vus>"
         )
 
     results_dir = Path(sys.argv[1])
     output_path = Path(sys.argv[2])
     environment_path = Path(sys.argv[3])
+    rate = int(sys.argv[4])
+    duration = sys.argv[5]
+    pre_allocated_vus = int(sys.argv[6])
+    max_vus = int(sys.argv[7])
 
     environment = load_json(environment_path)
     scenarios = []
@@ -98,11 +103,11 @@ def main():
         "test_conditions": environment.get("test_conditions"),
         "load_profile": {
             "executor": "constant-arrival-rate",
-            "rate": 5000,
+            "rate": rate,
             "timeUnit": "1s",
-            "duration": "60s",
-            "preAllocatedVUs": 200,
-            "maxVUs": 1000,
+            "duration": duration,
+            "preAllocatedVUs": pre_allocated_vus,
+            "maxVUs": max_vus,
         },
         "scenarios": scenarios,
     }

@@ -1,4 +1,4 @@
-.PHONY: help test verify run clean fmt docker-up docker-down benchmark
+.PHONY: help test verify run clean fmt docker-up docker-down benchmark benchmark-smoke benchmark-stable benchmark-stress
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -41,4 +41,15 @@ package: ## Package the application
 	cd ratelimiter-service && ./mvnw package -DskipTests
 
 benchmark: ## Run real k6 benchmarks and store measured results
-	bash benchmark/run-real-benchmark.sh
+	$(MAKE) benchmark-stable
+	$(MAKE) benchmark-stress
+	cp benchmark/results/baseline_stable.json benchmark/results/real_benchmark.json
+
+benchmark-stable: ## Run stable headline benchmark at 3000 req/s for 60s
+	RATE=3000 DURATION=60s PREALLOCATED_VUS=200 MAX_VUS=1000 OUTPUT_JSON=benchmark/results/baseline_stable.json bash benchmark/run-real-benchmark.sh
+
+benchmark-stress: ## Run stress benchmark at 5000 req/s for 60s
+	RATE=5000 DURATION=60s PREALLOCATED_VUS=200 MAX_VUS=1000 OUTPUT_JSON=benchmark/results/stress_5000.json bash benchmark/run-real-benchmark.sh
+
+benchmark-smoke: ## Run a lightweight regression smoke benchmark at 500 req/s for 20s
+	RATE=500 DURATION=20s PREALLOCATED_VUS=50 MAX_VUS=200 OUTPUT_JSON=benchmark/results/benchmark_smoke.json bash benchmark/run-real-benchmark.sh

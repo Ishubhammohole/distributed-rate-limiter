@@ -1,4 +1,4 @@
-rate-limiter:
+ratelimiter:
   profiling:
     enabled: true
     log-per-request: true

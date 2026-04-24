@@ -1,0 +1,178 @@
+{
+  "measured_at": "2026-04-24T07:22:17.819061+00:00",
+  "tooling": {
+    "k6_version": "k6 v1.7.1 (commit/devel, go1.26.1, darwin/arm64)",
+    "docker_version": "Docker version 28.0.4, build b8034c0",
+    "docker_compose_version": "Docker Compose version v2.34.0-desktop.1",
+    "java_version": "openjdk version \"17.0.15\" 2025-04-15\nOpenJDK Runtime Environment Homebrew (build 17.0.15+0)\nOpenJDK 64-Bit Server VM Homebrew (build 17.0.15+0, mixed mode, sharing)"
+  },
+  "test_conditions": {
+    "environment": "local machine with Docker Compose service + Redis",
+    "service_runtime": "rate-limiter and redis running in Docker",
+    "service_base_url": "http://127.0.0.1:18080",
+    "service_host_port": "18080",
+    "host_os": "macOS-26.4.1-arm64-arm-64bit",
+    "host_arch": "arm64",
+    "cpu": "Apple M3",
+    "logical_cpu_count": "8",
+    "memory_bytes": "8589934592",
+    "docker_services": "{\"Command\":\"\\\"docker-entrypoint.s\u2026\\\"\",\"CreatedAt\":\"2026-04-24 00:19:23 -0400 EDT\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"0fcffed51af4\",\"Image\":\"redis:7.2-alpine\",\"Labels\":\"com.docker.compose.image=sha256:0119b8a7fed0581067dd6af29826992bbd5cd4dce24a5dab2f91de902179bbce,com.docker.compose.project.config_files=/Users/shubhammohole/Downloads/distributed-rate-limiter-main/infra/docker-compose.yml,com.docker.compose.project.working_dir=/Users/shubhammohole/Downloads/distributed-rate-limiter-main/infra,com.docker.compose.replace=f6c9a3bf7f90cbac72daa1ae80f56c5c2abed558b6bc7379fd6d4f0598d31228,com.docker.compose.service=redis,com.docker.compose.version=2.34.0,com.docker.compose.config-hash=1a614aec5df6503ccd0ff7a8d551a2c1d4f7974218d446fda149dea5992adddb,com.docker.compose.depends_on=,com.docker.compose.oneoff=False,com.docker.compose.project=infra,com.docker.compose.container-number=1\",\"LocalVolumes\":\"1\",\"Mounts\":\"infra_redis_da\u2026\",\"Name\":\"rate-limiter-redis\",\"Names\":\"rate-limiter-redis\",\"Networks\":\"infra_rate-limiter-network\",\"Ports\":\"0.0.0.0:6379-\\u003e6379/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":6379,\"PublishedPort\":6379,\"Protocol\":\"tcp\"}],\"RunningFor\":\"3 hours ago\",\"Service\":\"redis\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up 11 minutes (healthy)\"}\n{\"Command\":\"\\\"java -jar app.jar\\\"\",\"CreatedAt\":\"2026-04-24 03:00:03 -0400 EDT\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"575c88782f03\",\"Image\":\"infra-rate-limiter\",\"Labels\":\"com.docker.compose.depends_on=redis:service_healthy:false,com.docker.compose.oneoff=False,desktop.docker.io/binds/0/Target=/app/config,com.docker.compose.config-hash=de3363142ddda63328a9800b080c54c737f53cb486e26dd59c4c642fc78f3315,com.docker.compose.container-number=1,com.docker.compose.image=sha256:5e22abd9715b5552520f01f8d87e6eda2f211e38ce28b85913e253d04390210d,com.docker.compose.project.config_files=/Users/shubhammohole/Downloads/distributed-rate-limiter-main/infra/docker-compose.yml,com.docker.compose.version=2.34.0,com.docker.compose.project.working_dir=/Users/shubhammohole/Downloads/distributed-rate-limiter-main/infra,com.docker.compose.service=rate-limiter,desktop.docker.io/binds/0/Source=/Users/shubhammohole/Downloads/distributed-rate-limiter-main/infra/config,desktop.docker.io/binds/0/SourceKind=hostFile,org.opencontainers.image.version=24.04,com.docker.compose.project=infra,com.docker.compose.replace=eda79104973f8c69de6f315a5fdf5b024e87199cce05fd1b5c99bb85683336da\",\"LocalVolumes\":\"0\",\"Mounts\":\"/host_mnt/User\u2026\",\"Name\":\"rate-limiter-service\",\"Names\":\"rate-limiter-service\",\"Networks\":\"infra_rate-limiter-network\",\"Ports\":\"0.0.0.0:18080-\\u003e8080/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":8080,\"PublishedPort\":18080,\"Protocol\":\"tcp\"}],\"RunningFor\":\"22 minutes ago\",\"Service\":\"rate-limiter\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up About a minute (healthy)\"}\n{\"Command\":\"\\\"java -XX:+UseG1GC -\u2026\\\"\",\"CreatedAt\":\"2026-04-23 23:07:46 -0400 EDT\",\"ExitCode\":0,\"Health\":\"unhealthy\",\"ID\":\"ba246fe69152\",\"Image\":\"infra-task-queue-engine\",\"Labels\":\"com.docker.compose.config-hash=0e752bde8cf2327a224112ab5e02e4121fc795e267ea065405de39530d50aa8d,com.docker.compose.container-number=1,com.docker.compose.image=sha256:74c52a6e71ff3d8cb0400edc6c39933f845c5c91015b8b7dfe9a5b4368f24632,com.docker.compose.oneoff=False,com.docker.compose.project.config_files=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/docker-compose.yml,com.docker.compose.project.working_dir=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra,com.docker.compose.depends_on=redis:service_healthy:false,ml-scheduler:service_healthy:false,com.docker.compose.project=infra,com.docker.compose.service=task-queue-engine,com.docker.compose.version=2.34.0,org.opencontainers.image.version=22.04\",\"LocalVolumes\":\"0\",\"Mounts\":\"\",\"Name\":\"tq-engine\",\"Names\":\"tq-engine\",\"Networks\":\"infra_tq-network\",\"Ports\":\"0.0.0.0:8080-\\u003e8080/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":8080,\"PublishedPort\":8080,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"task-queue-engine\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up 4 hours (unhealthy)\"}\n{\"Command\":\"\\\"/run.sh\\\"\",\"CreatedAt\":\"2026-04-23 23:07:46 -0400 EDT\",\"ExitCode\":0,\"Health\":\"\",\"ID\":\"94b8bf82d2cf\",\"Image\":\"grafana/grafana:10.2.0\",\"Labels\":\"com.docker.compose.version=2.34.0,desktop.docker.io/binds/0/Source=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/grafana/provisioning,desktop.docker.io/binds/0/Target=/etc/grafana/provisioning,com.docker.compose.depends_on=prometheus:service_started:false,com.docker.compose.image=sha256:9815cc4ede1a3ac5fbcb1969217638aa94f495c85385a04800945d5e8e4a1457,com.docker.compose.service=grafana,desktop.docker.io/binds/0/SourceKind=hostFile,com.docker.compose.container-number=1,com.docker.compose.oneoff=False,com.docker.compose.project.config_files=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/docker-compose.yml,com.docker.compose.config-hash=911186f0a80c9ed040746ab338b5629e77ec7db59c89f4f47a398dd724d9bd09,com.docker.compose.project=infra,com.docker.compose.project.working_dir=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra,maintainer=Grafana Labs \\u003chello@grafana.com\\u003e\",\"LocalVolumes\":\"1\",\"Mounts\":\"/host_mnt/User\u2026,infra_grafana-\u2026\",\"Name\":\"tq-grafana\",\"Names\":\"tq-grafana\",\"Networks\":\"infra_tq-network\",\"Ports\":\"0.0.0.0:3000-\\u003e3000/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":3000,\"PublishedPort\":3000,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"grafana\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up 4 hours\"}\n{\"Command\":\"\\\"uvicorn predict:app\u2026\\\"\",\"CreatedAt\":\"2026-04-23 23:07:46 -0400 EDT\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"566935b51d1f\",\"Image\":\"infra-ml-scheduler\",\"Labels\":\"com.docker.compose.service=ml-scheduler,com.docker.compose.container-number=1,com.docker.compose.depends_on=,com.docker.compose.image=sha256:244c511689fbbddabcb3fda074f9a95c693cda83602befcd2a86543f7f040b99,com.docker.compose.oneoff=False,com.docker.compose.project=infra,com.docker.compose.project.config_files=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/docker-compose.yml,com.docker.compose.project.working_dir=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra,com.docker.compose.config-hash=2118629a2dbad40f5136327d58b1a2adf3782c1da3700bae530a71167e179a8c,com.docker.compose.version=2.34.0\",\"LocalVolumes\":\"0\",\"Mounts\":\"\",\"Name\":\"tq-ml-scheduler\",\"Names\":\"tq-ml-scheduler\",\"Networks\":\"infra_tq-network\",\"Ports\":\"0.0.0.0:8081-\\u003e8081/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":8081,\"PublishedPort\":8081,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"ml-scheduler\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up 4 hours (healthy)\"}\n{\"Command\":\"\\\"/bin/prometheus --c\u2026\\\"\",\"CreatedAt\":\"2026-04-23 23:07:46 -0400 EDT\",\"ExitCode\":0,\"Health\":\"\",\"ID\":\"6dd3b15d6161\",\"Image\":\"prom/prometheus:v2.47.0\",\"Labels\":\"com.docker.compose.version=2.34.0,maintainer=The Prometheus Authors \\u003cprometheus-developers@googlegroups.com\\u003e,desktop.docker.io/binds/0/Source=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/prometheus/prometheus.yml,com.docker.compose.config-hash=f20311f5081ad9be48a89525e14d76cc2854f7d6aada12499bda0b3d4e88766e,com.docker.compose.container-number=1,com.docker.compose.depends_on=task-queue-engine:service_started:false,com.docker.compose.project=infra,com.docker.compose.project.config_files=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra/docker-compose.yml,desktop.docker.io/binds/0/Target=/etc/prometheus/prometheus.yml,com.docker.compose.image=sha256:eb8939d5c17455a7c7f539f5fe8e425ec0b9937470584f0746d377cc4a1660df,com.docker.compose.oneoff=False,com.docker.compose.project.working_dir=/Users/shubhammohole/Documents/New project/Distributed-Task-Queue-Engine/infra,com.docker.compose.service=prometheus,desktop.docker.io/binds/0/SourceKind=hostFile\",\"LocalVolumes\":\"1\",\"Mounts\":\"/host_mnt/User\u2026,dddf851c03cd17\u2026\",\"Name\":\"tq-prometheus\",\"Names\":\"tq-prometheus\",\"Networks\":\"infra_tq-network\",\"Ports\":\"0.0.0.0:9090-\\u003e9090/tcp\",\"Project\":\"infra\",\"Publishers\":[{\"URL\":\"0.0.0.0\",\"TargetPort\":9090,\"PublishedPort\":9090,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"prometheus\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up 4 hours\"}"
+  },
+  "load_profile": {
+    "executor": "constant-arrival-rate",
+    "rate": 500,
+    "timeUnit": "1s",
+    "duration": "20s",
+    "preAllocatedVUs": 50,
+    "maxVUs": 200
+  },
+  "scenarios": [
+    {
+      "scenario": "hot_key",
+      "throughput_rps": 478.2909549816075,
+      "http_req_failed_rate": 0,
+      "success_rate": 1,
+      "rate_limiter_allowed_rate": 1,
+      "rate_limiter_blocked_rate": 0,
+      "latency_distribution_ms": {
+        "avg": 69.10711895055891,
+        "min": 0.684,
+        "p50": 4.388,
+        "p90": 276.7606000000001,
+        "p95": 419.41119999999984,
+        "p99": 913.1568599999999,
+        "max": 1340.725
+      },
+      "server_breakdown_ms": {
+        "total": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "api_processing": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "redis": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "serialization": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        }
+      },
+      "raw_summary_file": "hot_key-summary.json",
+      "raw_stdout_log": "hot_key.log"
+    },
+    {
+      "scenario": "unique_keys_1k",
+      "throughput_rps": 482.7488286241658,
+      "http_req_failed_rate": 0,
+      "success_rate": 1,
+      "rate_limiter_allowed_rate": 1,
+      "rate_limiter_blocked_rate": 0,
+      "latency_distribution_ms": {
+        "avg": 51.93392087821024,
+        "min": 0.517,
+        "p50": 7.354,
+        "p90": 109.16650000000004,
+        "p95": 242.1562499999998,
+        "p99": 822.6423999999995,
+        "max": 1249.838
+      },
+      "server_breakdown_ms": {
+        "total": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "api_processing": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "redis": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "serialization": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        }
+      },
+      "raw_summary_file": "unique_keys_1k-summary.json",
+      "raw_stdout_log": "unique_keys_1k.log"
+    },
+    {
+      "scenario": "mixed_traffic",
+      "throughput_rps": 329.0316486737099,
+      "http_req_failed_rate": 0.006976398990648657,
+      "success_rate": 0.9930236010093514,
+      "rate_limiter_allowed_rate": 0.9930236010093514,
+      "rate_limiter_blocked_rate": 0,
+      "latency_distribution_ms": {
+        "avg": 313.9504607392014,
+        "min": 1.006,
+        "p50": 33.324,
+        "p90": 948.0058000000004,
+        "p95": 1280.7974,
+        "p99": 4187.5336,
+        "max": 5025.718
+      },
+      "server_breakdown_ms": {
+        "total": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "api_processing": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "redis": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        },
+        "serialization": {
+          "avg": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null
+        }
+      },
+      "raw_summary_file": "mixed_traffic-summary.json",
+      "raw_stdout_log": "mixed_traffic.log"
+    }
+  ]
+}

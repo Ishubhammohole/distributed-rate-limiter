@@ -1,12 +1,6 @@
 package com.ratelimiter.infrastructure;
-
-import com.ratelimiter.profiling.RequestProfilingHolder;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -26,19 +20,12 @@ public class LuaScriptExecutor {
     private static final Logger logger = LoggerFactory.getLogger(LuaScriptExecutor.class);
     
     private final RedisTemplate<String, String> redisTemplate;
-    private final MeterRegistry meterRegistry;
     private final ConcurrentHashMap<String, DefaultRedisScript<Long>> longScriptCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, DefaultRedisScript<String>> stringScriptCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, DefaultRedisScript<List>> listScriptCache = new ConcurrentHashMap<>();
     
-    @Autowired
-    public LuaScriptExecutor(RedisTemplate<String, String> redisTemplate, MeterRegistry meterRegistry) {
+    public LuaScriptExecutor(RedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.meterRegistry = meterRegistry;
-    }
-
-    LuaScriptExecutor(RedisTemplate<String, String> redisTemplate) {
-        this(redisTemplate, new SimpleMeterRegistry());
     }
     
     /**
@@ -58,7 +45,14 @@ public class LuaScriptExecutor {
                 return rs;
             });
 
-            return executeTimed("long", redisScript, keys, args);
+            
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -82,7 +76,14 @@ public class LuaScriptExecutor {
                 return rs;
             });
 
-            return executeTimed("string", redisScript, keys, args);
+            
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -116,8 +117,14 @@ public class LuaScriptExecutor {
                 rs.setResultType(List.class);
                 return rs;
             });
-
-            return executeTimed("list", redisScript, keys, args);
+            
+            // Convert all arguments to strings for Redis serialization
+            String[] stringArgs = new String[args.length];
+            for (int i = 0; i < args.length; i++) {
+                stringArgs[i] = String.valueOf(args[i]);
+            }
+            
+            return redisTemplate.execute(redisScript, keys, (Object[]) stringArgs);
         } catch (Exception e) {
             logger.error("Failed to execute Lua script: {}", e.getMessage());
             throw new RuntimeException("Lua script execution failed", e);
@@ -131,24 +138,5 @@ public class LuaScriptExecutor {
      */
     public int getCacheSize() {
         return longScriptCache.size() + stringScriptCache.size() + listScriptCache.size();
-    }
-
-    private <T> T executeTimed(String resultType, DefaultRedisScript<T> script, List<String> keys, Object... args) {
-        String[] stringArgs = new String[args.length];
-        for (int i = 0; i < args.length; i++) {
-            stringArgs[i] = String.valueOf(args[i]);
-        }
-
-        long startNanos = System.nanoTime();
-        try {
-            return redisTemplate.execute(script, keys, (Object[]) stringArgs);
-        } finally {
-            long durationNanos = System.nanoTime() - startNanos;
-            RequestProfilingHolder.recordRedisNanos(durationNanos);
-            Timer.builder("rate_limiter.redis.execution")
-                    .tag("result_type", resultType)
-                    .register(meterRegistry)
-                    .record(durationNanos, java.util.concurrent.TimeUnit.NANOSECONDS);
-        }
     }
 }

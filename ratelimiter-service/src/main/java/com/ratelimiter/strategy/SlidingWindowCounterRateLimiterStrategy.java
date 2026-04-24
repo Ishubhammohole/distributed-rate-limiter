@@ -133,7 +133,8 @@ public class SlidingWindowCounterRateLimiterStrategy implements RateLimiterStrat
             }
             
         } catch (Exception e) {
-            logger.error("Rate limit execution failed: key={}, algorithm=sliding_window_counter, failing open", sanitizeKey(request.getKey()), e);
+            logger.warn("Rate limit execution failed: key={}, algorithm=sliding_window_counter, failing open: {}",
+                    sanitizeKey(request.getKey()), e.getMessage());
             
             // Fail-open behavior: allow request with conservative remaining estimate
             Instant resetTime = Instant.now(clock).plusMillis(parseWindowToMilliseconds(request.getWindow()));

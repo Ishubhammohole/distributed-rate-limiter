@@ -1,5 +1,13 @@
 server:
   port: 8080
+  tomcat:
+    threads:
+      # The service is synchronous (Spring MVC + Redis), so allowing a few hundred
+      # worker threads prevents request queuing from dominating latency under load.
+      max: 400
+      min-spare: 20
+    max-connections: 8192
+    accept-count: 1000
 
 spring:
   application:
@@ -12,10 +20,13 @@ spring:
       timeout: 2000ms
       lettuce:
         pool:
-          max-active: 100
-          max-idle: 20
-          min-idle: 10
-          max-wait: 100ms
+          # The service is synchronous and each request borrows a Redis connection
+          # for a single Lua script. A wider pool prevents borrow starvation once
+          # Tomcat concurrency climbs during the k6 benchmark.
+          max-active: 400
+          max-idle: 100
+          min-idle: 20
+          max-wait: 500ms
 
 management:
   endpoints:
@@ -37,7 +48,7 @@ management:
 logging:
   level:
     com.ratelimiter: INFO
-    org.springframework.data.redis: INFO
+    org.springframework.data.redis: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
@@ -49,7 +60,4 @@ rate-limiter:
   redis:
     script-cache-size: 100
     connection-timeout: 2000ms
-    command-timeout: 1000ms
-  profiling:
-    enabled: false
-    log-per-request: false
+    command-timeout: 2000ms

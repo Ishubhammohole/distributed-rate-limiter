@@ -4,7 +4,7 @@ services:
     container_name: rate-limiter-redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    command: redis-server --save "" --appendonly no --maxmemory 1gb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:

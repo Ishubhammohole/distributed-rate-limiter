@@ -144,7 +144,7 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
             }
             
         } catch (Exception e) {
-            logger.error("Token bucket execution failed for key={}", request.getKey(), e);
+            logger.warn("Token bucket execution failed for key={}: {}", request.getKey(), e.getMessage());
             throw new RuntimeException("Token bucket rate limiting failed", e);
         }
     }

@@ -18,9 +18,13 @@ import java.time.Duration;
 
 /**
  * Redis configuration for rate limiting infrastructure.
- * 
- * Configures Lettuce client with appropriate timeouts and connection pooling
- * for high-performance rate limiting operations.
+ *
+ * Configures Lettuce for a high-concurrency rate-limiter workload.
+ *
+ * The service issues one Redis Lua call per request, so a small connection pool
+ * performs better than a single shared connection once sustained concurrency
+ * rises into the thousands. Borrow-time validation stays disabled so pooled
+ * checkout does not add extra round-trips on the hot path.
  */
 @Configuration
 public class RedisConfig {
@@ -33,6 +37,7 @@ public class RedisConfig {
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory() {
+        // Configure Redis standalone connection
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
         config.setHostName(redisProperties.getHost());
         config.setPort(redisProperties.getPort());
@@ -43,6 +48,7 @@ public class RedisConfig {
             config.setDatabase(redisProperties.getDatabase());
         }
 
+        // Configure Lettuce client options for rate limiting workload
         SocketOptions socketOptions = SocketOptions.builder()
                 .connectTimeout(Duration.ofMillis(2000))
                 .keepAlive(true)
@@ -53,14 +59,14 @@ public class RedisConfig {
                 .autoReconnect(true)
                 .build();
 
-        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
         RedisProperties.Pool pool = redisProperties.getLettuce().getPool();
+        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
         poolConfig.setMaxTotal(pool.getMaxActive());
         poolConfig.setMaxIdle(pool.getMaxIdle());
         poolConfig.setMinIdle(pool.getMinIdle());
         poolConfig.setMaxWait(pool.getMaxWait());
         poolConfig.setBlockWhenExhausted(true);
-        poolConfig.setTestOnBorrow(true);
+        poolConfig.setTestOnBorrow(false);
         poolConfig.setTestWhileIdle(true);
         poolConfig.setTimeBetweenEvictionRuns(Duration.ofSeconds(30));
 
@@ -72,8 +78,9 @@ public class RedisConfig {
                 .build();
 
         LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(config, clientConfig);
+        // Disable the shared native connection so synchronous RedisTemplate calls can
+        // borrow from the pool under load instead of queueing behind one socket.
         connectionFactory.setShareNativeConnection(false);
-        connectionFactory.setValidateConnection(true);
         return connectionFactory;
     }
 

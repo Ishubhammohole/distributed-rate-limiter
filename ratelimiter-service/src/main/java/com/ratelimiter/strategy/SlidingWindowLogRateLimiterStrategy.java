@@ -154,7 +154,7 @@ public class SlidingWindowLogRateLimiterStrategy implements RateLimiterStrategy 
             }
             
         } catch (Exception e) {
-            logger.error("Sliding window log execution failed for key={}", request.getKey(), e);
+            logger.warn("Sliding window log execution failed for key={}: {}", request.getKey(), e.getMessage());
             throw new RuntimeException("Sliding window log rate limiting failed", e);
         }
     }
